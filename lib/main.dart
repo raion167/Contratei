@@ -255,8 +255,36 @@ class _RegisterFormState extends State<CadastroScreen> {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+  final List<String> allCategorias = [
+    "Categoria 1",
+    "Categoria 2",
+    "Categoria 3",
+    "Categoria 4",
+  ];
+
+  List<String> filteredCategorias = [];
+  @override
+  void initState() {
+    super.initState();
+    filteredCategorias = allCategorias;
+  }
+
+  void filterCategorias(String query) {
+    setState(() {
+      filteredCategorias = allCategorias
+          .where((cat) => cat.toLowerCase().contains(query.toLowerCase()))
+          .toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -267,6 +295,7 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           children: [
             TextField(
+              onChanged: filterCategorias,
               decoration: InputDecoration(
                 hintText: "Pesquisar Categorias...",
                 prefixIcon: const Icon(Icons.search),
@@ -303,6 +332,45 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        selectedItemColor: Colors.green,
+        unselectedItemColor: Colors.grey,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+
+          if (index == 0) {
+          } else if (index == 1) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MeuPerfilScreen()),
+            );
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Início"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: "Meu Perfil",
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MeuPerfilScreen extends StatelessWidget {
+  const MeuPerfilScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Meu Perfil"), centerTitle: true),
+      body: const Center(
+        child: Text("Perfil do Usuário", style: TextStyle(fontSize: 18)),
       ),
     );
   }
