@@ -19,6 +19,27 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// modelo simples de usuário
+class Usuario {
+  String nome;
+  String email;
+  String cpf;
+  String telefone;
+  String tipoUsuario;
+  String? ocupacao;
+  String? fotoPath;
+
+  Usuario({
+    required this.nome,
+    required this.email,
+    required this.cpf,
+    required this.telefone,
+    required this.tipoUsuario,
+    this.ocupacao,
+    this.fotoPath,
+  });
+}
+
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
 
@@ -134,18 +155,26 @@ class _LoginFormState extends State<LoginForm> {
         Center(
           child: ElevatedButton(
             onPressed: () {
-              String emailValido = "admin";
-              String senhaValida = "1234";
-
-              if (emailController.text == emailValido &&
-                  senhaController.text == senhaValida) {
-                Navigator.pushReplacement(
+              if (tipoUsuario == "Contratante") {
+                Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => HomeScreen(
+                      usuario: Usuario(
+                        nome: "exemplo",
+                        email: emailController.text,
+                        cpf: "00000000000",
+                        telefone: "0000000",
+                        tipoUsuario: tipoUsuario,
+                      ),
+                    ),
+                  ),
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Email ou senha Incorretos")),
+                  const SnackBar(
+                    content: Text("Acesso disponível apenas para contratantes"),
+                  ),
                 );
               }
             },
@@ -174,13 +203,13 @@ class _RegisterFormState extends State<CadastroScreen> {
   final TextEditingController ocupacaoController = TextEditingController();
 
   List<bool> isSelected = [true, false]; // contratante por padrão
+
   @override
   Widget build(BuildContext context) {
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
     return Column(
       children: [
         const SizedBox(height: 10),
-
         Center(
           child: ToggleButtons(
             borderRadius: BorderRadius.circular(12),
@@ -256,7 +285,8 @@ class _RegisterFormState extends State<CadastroScreen> {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Usuario usuario;
+  const HomeScreen({super.key, required this.usuario});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -305,7 +335,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
@@ -346,7 +375,9 @@ class _HomeScreenState extends State<HomeScreen> {
           } else if (index == 1) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const MeuPerfilScreen()),
+              MaterialPageRoute(
+                builder: (_) => MeuPerfilScreen(usuario: widget.usuario),
+              ),
             );
           }
         },
@@ -363,14 +394,217 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class MeuPerfilScreen extends StatelessWidget {
-  const MeuPerfilScreen({super.key});
+  final Usuario usuario;
+  const MeuPerfilScreen({super.key, required this.usuario});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Meu Perfil"), centerTitle: true),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            UserAccountsDrawerHeader(
+              accountName: Text(usuario.nome),
+              accountEmail: Text(usuario.email),
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Text(
+                  usuario.nome.isNotEmpty ? usuario.nome[0].toUpperCase() : "?",
+                  style: const TextStyle(fontSize: 30, color: Colors.green),
+                ),
+              ),
+              decoration: const BoxDecoration(color: Colors.green),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text("Meus Dados"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MeusDadosScreen(usuario: usuario),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.credit_card),
+              title: const Text("Formas de Pagamento"),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Abrindo formas de pagamento..."),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text("Histórico de Serviços"),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Abrindo Histórico de serviços..."),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app),
+              title: const Text("Sair"),
+              onTap: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+            ),
+          ],
+        ),
+      ),
       body: const Center(
-        child: Text("Perfil do Usuário", style: TextStyle(fontSize: 18)),
+        child: Text(
+          "Selecione uma opção no menu Lateral",
+          style: TextStyle(fontSize: 18),
+        ),
+      ),
+    );
+  }
+}
+
+// =================== MEUS DADOS ==================
+class MeusDadosScreen extends StatefulWidget {
+  final Usuario usuario;
+
+  const MeusDadosScreen({super.key, required this.usuario});
+
+  @override
+  State<MeusDadosScreen> createState() => _MeusDadosScreenState();
+}
+
+class _MeusDadosScreenState extends State<MeusDadosScreen> {
+  late TextEditingController nomeController;
+  late TextEditingController emailController;
+  late TextEditingController cpfController;
+  late TextEditingController telefoneController;
+  late TextEditingController ocupacaoController;
+
+  String? fotoPerfilPath;
+
+  @override
+  void initState() {
+    super.initState();
+    // inicializa os controllers com os valores do usuário (evita null)
+    nomeController = TextEditingController(text: widget.usuario.nome);
+    emailController = TextEditingController(text: widget.usuario.email);
+    cpfController = TextEditingController(text: widget.usuario.cpf);
+    telefoneController = TextEditingController(text: widget.usuario.telefone);
+    ocupacaoController = TextEditingController(
+      text: widget.usuario.ocupacao ?? "",
+    );
+    fotoPerfilPath = widget.usuario.fotoPath;
+  }
+
+  @override
+  void dispose() {
+    // sempre descartar controllers
+    nomeController.dispose();
+    emailController.dispose();
+    cpfController.dispose();
+    telefoneController.dispose();
+    ocupacaoController.dispose();
+    super.dispose();
+  }
+
+  void _salvarAlteracoes() {
+    // Atualiza o objeto usuário localmente (a persistência real fica a seu critério)
+    widget.usuario.nome = nomeController.text;
+    widget.usuario.email = emailController.text;
+    widget.usuario.cpf = cpfController.text;
+    widget.usuario.telefone = telefoneController.text;
+    widget.usuario.ocupacao = ocupacaoController.text.isEmpty
+        ? null
+        : ocupacaoController.text;
+    widget.usuario.fotoPath = fotoPerfilPath;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Dados atualizados!")));
+    // opcional: voltar para a tela anterior
+    // Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Meus Dados")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () {
+                // implementar seleção de imagem se desejar (image_picker)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Alterar foto de perfil (implementar)"),
+                  ),
+                );
+              },
+              child: CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.green.shade200,
+                backgroundImage: (fotoPerfilPath != null)
+                    ? AssetImage(fotoPerfilPath!)
+                    : null,
+                child: fotoPerfilPath == null
+                    ? const Icon(
+                        Icons.camera_alt,
+                        size: 40,
+                        color: Colors.white,
+                      )
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: nomeController,
+              decoration: const InputDecoration(labelText: "Nome"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(labelText: "Email"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: cpfController,
+              decoration: const InputDecoration(labelText: "CPF"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: telefoneController,
+              decoration: const InputDecoration(labelText: "Telefone"),
+            ),
+            const SizedBox(height: 10),
+            // mostra ocupação apenas para prestadores (exemplo)
+            if (widget.usuario.tipoUsuario == "Prestador") ...[
+              TextField(
+                controller: ocupacaoController,
+                decoration: const InputDecoration(labelText: "Ocupação"),
+              ),
+              const SizedBox(height: 10),
+            ],
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _salvarAlteracoes,
+              child: const Text("Salvar Alterações"),
+            ),
+          ],
+        ),
       ),
     );
   }
