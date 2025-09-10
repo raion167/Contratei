@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -19,7 +21,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// modelo simples de usuário
+//=============== MODELO TESTE DE USUARIO
 class Usuario {
   String nome;
   String email;
@@ -186,7 +188,7 @@ class _LoginFormState extends State<LoginForm> {
   }
 }
 
-// ---------------- CADASTRO ----------------
+// ============================= CADASTRO ======================================
 class CadastroScreen extends StatefulWidget {
   const CadastroScreen({super.key});
 
@@ -204,20 +206,69 @@ class _RegisterFormState extends State<CadastroScreen> {
 
   List<bool> isSelected = [true, false]; // contratante por padrão
 
+  Future<void> cadastrarUsuario() async {
+    String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
+
+    try {
+      var url = Uri.parse("http://10.0.2.2/app/cadastro.php");
+      // ⚠️ Se estiver testando no celular físico, troque "10.0.2.2"
+      // pelo IP da sua máquina (ex: http://192.168.0.10/app/cadastro.php)
+
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "nome": nomeController.text.trim(),
+          "email": emailController.text.trim(),
+          "senha": senhaController.text.trim(),
+          "cpf": cpfController.text.trim(),
+          "telefone": telefoneController.text.trim(),
+          "tipoUsuario": tipoUsuario,
+          "ocupacao": tipoUsuario == "Prestador"
+              ? ocupacaoController.text.trim()
+              : "",
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+
+        if (data["success"]) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(data["message"])));
+          Navigator.pop(context); // volta para login
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(data["message"])));
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Erro no servidor. Código diferente de 200"),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro de conexão: $e")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
-    return Column(
-      children: [
-        const SizedBox(height: 10),
-        Center(
-          child: ToggleButtons(
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          ToggleButtons(
             borderRadius: BorderRadius.circular(12),
-            fillColor: Colors.green,
-            selectedColor: Colors.white,
-            color: Colors.black,
             isSelected: isSelected,
-            onPressed: (int index) {
+            onPressed: (index) {
               setState(() {
                 for (int i = 0; i < isSelected.length; i++) {
                   isSelected[i] = i == index;
@@ -235,55 +286,44 @@ class _RegisterFormState extends State<CadastroScreen> {
               ),
             ],
           ),
-        ),
-        TextField(
-          controller: nomeController,
-          decoration: const InputDecoration(labelText: "Nome"),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: emailController,
-          decoration: const InputDecoration(labelText: "Email"),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: senhaController,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: "Senha"),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: cpfController,
-          decoration: const InputDecoration(labelText: "CPF"),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: telefoneController,
-          decoration: const InputDecoration(labelText: "Telefone"),
-        ),
-        const SizedBox(height: 10),
-        if (isSelected[1]) ...[
           TextField(
-            controller: ocupacaoController,
-            decoration: const InputDecoration(labelText: "Ocupação"),
+            controller: nomeController,
+            decoration: const InputDecoration(labelText: "Nome"),
           ),
-          const SizedBox(height: 10),
+          TextField(
+            controller: emailController,
+            decoration: const InputDecoration(labelText: "Email"),
+          ),
+          TextField(
+            controller: senhaController,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: "Senha"),
+          ),
+          TextField(
+            controller: cpfController,
+            decoration: const InputDecoration(labelText: "CPF"),
+          ),
+          TextField(
+            controller: telefoneController,
+            decoration: const InputDecoration(labelText: "Telefone"),
+          ),
+          if (tipoUsuario == "Prestador")
+            TextField(
+              controller: ocupacaoController,
+              decoration: const InputDecoration(labelText: "Ocupação"),
+            ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: cadastrarUsuario,
+            child: const Text("Cadastrar"),
+          ),
         ],
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: () {
-            // Aqui você faria a lógica de cadastro
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Cadastro realizado!")),
-            );
-          },
-          child: const Text("Cadastrar"),
-        ),
-      ],
+      ),
     );
   }
 }
 
+//========================= PÁGINA INICIAL =====================================
 class HomeScreen extends StatefulWidget {
   final Usuario usuario;
   const HomeScreen({super.key, required this.usuario});
@@ -393,6 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+//================== TELA DE PERFIL DO USUÁRIO
 class MeuPerfilScreen extends StatelessWidget {
   final Usuario usuario;
   const MeuPerfilScreen({super.key, required this.usuario});
