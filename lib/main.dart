@@ -49,6 +49,7 @@ class AuthPage extends StatefulWidget {
   State<AuthPage> createState() => _AuthPageState();
 }
 
+// ======================== PAGINA DE LOGIN
 class _AuthPageState extends State<AuthPage> {
   bool showLogin = true;
 
@@ -86,7 +87,6 @@ class _AuthPageState extends State<AuthPage> {
   }
 }
 
-// ---------------- LOGIN ----------------
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
 
@@ -97,8 +97,71 @@ class LoginForm extends StatefulWidget {
 class _LoginFormState extends State<LoginForm> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController senhaController = TextEditingController();
+  List<bool> isSelected = [true, false];
 
-  List<bool> isSelected = [true, false]; // contratante por padrão
+  Future<void> login() async {
+    String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
+
+    if (emailController.text.isEmpty || senhaController.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Preencha todos os campos")));
+      return;
+    }
+
+    try {
+      var url = Uri.parse("http://localhost/app/login.php"); // Flutter Web
+
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "email": emailController.text.trim(),
+          "senha": senhaController.text.trim(),
+          "tipoUsuario": tipoUsuario,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+        if (data['success']) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(data['message'])));
+
+          // navegar para HomeScreen com dados do usuário
+          var user = data['usuario'];
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HomeScreen(
+                usuario: Usuario(
+                  nome: user['nome'],
+                  email: user['email'],
+                  cpf: user['cpf'],
+                  telefone: user['telefone'],
+                  tipoUsuario: user['tipoUsuario'],
+                  ocupacao: user['ocupacao'],
+                ),
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(data['message'])));
+        }
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Erro no servidor")));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro de conexão: $e")));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,13 +181,8 @@ class _LoginFormState extends State<LoginForm> {
           decoration: const InputDecoration(labelText: "Senha"),
         ),
         const SizedBox(height: 20),
-
-        const Text(
-          "Selecione o tipo de usuário:",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        const Text("Selecione o tipo de usuário:"),
         const SizedBox(height: 10),
-
         Center(
           child: ToggleButtons(
             borderRadius: BorderRadius.circular(12),
@@ -132,14 +190,13 @@ class _LoginFormState extends State<LoginForm> {
             selectedColor: Colors.white,
             color: Colors.black,
             isSelected: isSelected,
-            onPressed: (int index) {
+            onPressed: (index) {
               setState(() {
                 for (int i = 0; i < isSelected.length; i++) {
                   isSelected[i] = i == index;
                 }
               });
             },
-
             children: const [
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
@@ -152,36 +209,9 @@ class _LoginFormState extends State<LoginForm> {
             ],
           ),
         ),
-
         const SizedBox(height: 20),
         Center(
-          child: ElevatedButton(
-            onPressed: () {
-              if (tipoUsuario == "Contratante") {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HomeScreen(
-                      usuario: Usuario(
-                        nome: "exemplo",
-                        email: emailController.text,
-                        cpf: "00000000000",
-                        telefone: "0000000",
-                        tipoUsuario: tipoUsuario,
-                      ),
-                    ),
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Acesso disponível apenas para contratantes"),
-                  ),
-                );
-              }
-            },
-            child: const Text("Entrar"),
-          ),
+          child: ElevatedButton(onPressed: login, child: const Text("Entrar")),
         ),
       ],
     );
@@ -205,14 +235,11 @@ class _RegisterFormState extends State<CadastroScreen> {
   final TextEditingController ocupacaoController = TextEditingController();
 
   List<bool> isSelected = [true, false]; // contratante por padrão
-
   Future<void> cadastrarUsuario() async {
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
 
     try {
-      var url = Uri.parse("http://10.0.2.2/app/cadastro.php");
-      // ⚠️ Se estiver testando no celular físico, troque "10.0.2.2"
-      // pelo IP da sua máquina (ex: http://192.168.0.10/app/cadastro.php)
+      var url = Uri.parse("http://localhost/app/cadastro.php");
 
       var response = await http.post(
         url,
@@ -234,26 +261,46 @@ class _RegisterFormState extends State<CadastroScreen> {
         var data = jsonDecode(response.body);
 
         if (data["success"]) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(data["message"])));
-          Navigator.pop(context); // volta para login
+          // Mostra mensagem e depois volta para login
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("✅ ${data["message"]}"),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+
+          // espera 2 segundos e volta para a tela de login
+          Future.delayed(const Duration(seconds: 2), () {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => AuthPage()),
+              (route) => false,
+            );
+          });
         } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(data["message"])));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("❌ ${data["message"]}"),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Erro no servidor. Código diferente de 200"),
+            backgroundColor: Colors.red,
           ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro de conexão: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro de conexão: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
