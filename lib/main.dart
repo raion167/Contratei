@@ -110,7 +110,7 @@ class _LoginFormState extends State<LoginForm> {
     }
 
     try {
-      var url = Uri.parse("http://localhost/app/login.php"); // Flutter Web
+      var url = Uri.parse("http://localhost:8080/app/login.php"); // Flutter Web
 
       var response = await http.post(
         url,
@@ -232,14 +232,41 @@ class _RegisterFormState extends State<CadastroScreen> {
   final TextEditingController senhaController = TextEditingController();
   final TextEditingController cpfController = TextEditingController();
   final TextEditingController telefoneController = TextEditingController();
-  final TextEditingController ocupacaoController = TextEditingController();
 
-  List<bool> isSelected = [true, false]; // contratante por padrão
+  String? ocupacaoSelecionada; // valor escolhido no dropdown
+  List<String> categorias = []; // lista carregada do banco
+
+  List<bool> isSelected = [true, false];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchCategorias(); // carrega categorias ao abrir tela
+  }
+
+  Future<void> fetchCategorias() async {
+    try {
+      var url = Uri.parse("http://localhost:8080/app/getCategorias.php");
+      var response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+        if (data["success"] == true) {
+          setState(() {
+            categorias = List<String>.from(data["categorias"]);
+          });
+        }
+      }
+    } catch (e) {
+      print("Erro ao carregar categorias: $e");
+    }
+  }
+
   Future<void> cadastrarUsuario() async {
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
 
     try {
-      var url = Uri.parse("http://localhost/app/cadastro.php");
+      var url = Uri.parse("http://localhost:8080/app/cadastro.php");
 
       var response = await http.post(
         url,
@@ -252,55 +279,33 @@ class _RegisterFormState extends State<CadastroScreen> {
           "telefone": telefoneController.text.trim(),
           "tipoUsuario": tipoUsuario,
           "ocupacao": tipoUsuario == "Prestador"
-              ? ocupacaoController.text.trim()
+              ? ocupacaoSelecionada ?? ""
               : "",
         }),
       );
 
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
+      var data = jsonDecode(response.body);
 
-        if (data["success"]) {
-          // Mostra mensagem e depois volta para login
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("✅ ${data["message"]}"),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
+      if (data["success"]) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("✅ ${data["message"]}")));
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const AuthPage()),
+            (route) => false,
           );
-
-          // espera 2 segundos e volta para a tela de login
-          Future.delayed(const Duration(seconds: 2), () {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => AuthPage()),
-              (route) => false,
-            );
-          });
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("❌ ${data["message"]}"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Erro no servidor. Código diferente de 200"),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("❌ ${data["message"]}")));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro de conexão: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
     }
   }
 
@@ -354,11 +359,27 @@ class _RegisterFormState extends State<CadastroScreen> {
             controller: telefoneController,
             decoration: const InputDecoration(labelText: "Telefone"),
           ),
+
+          // 🔽 Dropdown carregado do banco
           if (tipoUsuario == "Prestador")
-            TextField(
-              controller: ocupacaoController,
-              decoration: const InputDecoration(labelText: "Ocupação"),
-            ),
+            categorias.isEmpty
+                ? const CircularProgressIndicator()
+                : DropdownButtonFormField<String>(
+                    value: ocupacaoSelecionada,
+                    hint: const Text("Selecione a categoria"),
+                    items: categorias
+                        .map(
+                          (cat) =>
+                              DropdownMenuItem(value: cat, child: Text(cat)),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        ocupacaoSelecionada = value;
+                      });
+                    },
+                  ),
+
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: cadastrarUsuario,
@@ -381,18 +402,35 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  final List<String> allCategorias = [
-    "Categoria 1",
-    "Categoria 2",
-    "Categoria 3",
-    "Categoria 4",
-  ];
 
+  List<String> allCategorias = []; // 🔽 Agora vem do banco
   List<String> filteredCategorias = [];
+  bool loading = true;
+
   @override
   void initState() {
     super.initState();
-    filteredCategorias = allCategorias;
+    fetchCategorias();
+  }
+
+  Future<void> fetchCategorias() async {
+    try {
+      var url = Uri.parse("http://localhost:8080/app/getCategorias.php");
+      var response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+        if (data["success"]) {
+          setState(() {
+            allCategorias = List<String>.from(data["categorias"]);
+            filteredCategorias = allCategorias;
+            loading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Erro ao carregar categorias: $e");
+    }
   }
 
   void filterCategorias(String query) {
@@ -409,45 +447,62 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(title: const Text("Página Inicial"), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              onChanged: filterCategorias,
-              decoration: InputDecoration(
-                hintText: "Pesquisar Categorias...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                children: List.generate(4, (index) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade200,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        "Categoria ${index + 1}",
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+        child: loading
+            ? const Center(child: CircularProgressIndicator()) // 🔄 loading
+            : Column(
+                children: [
+                  TextField(
+                    onChanged: filterCategorias,
+                    decoration: InputDecoration(
+                      hintText: "Pesquisar Categorias...",
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                  );
-                }),
+                  ),
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      children: List.generate(filteredCategorias.length, (
+                        index,
+                      ) {
+                        final categoria = filteredCategorias[index];
+                        return GestureDetector(
+                          onTap: () {
+                            // 👇 abre a tela de prestadores com a categoria escolhida
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    PrestadoresScreen(categoria: categoria),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                categoria,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -459,6 +514,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
 
           if (index == 0) {
+            // já está na Home
           } else if (index == 1) {
             Navigator.push(
               context,
@@ -523,9 +579,10 @@ class MeuPerfilScreen extends StatelessWidget {
               title: const Text("Formas de Pagamento"),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Abrindo formas de pagamento..."),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FormasPagamentoScreen(usuario: usuario),
                   ),
                 );
               },
@@ -694,6 +751,309 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ====================== TELA DE FORMAS DE PAGAMENTO
+
+class FormasPagamentoScreen extends StatefulWidget {
+  final Usuario usuario;
+  const FormasPagamentoScreen({super.key, required this.usuario});
+
+  @override
+  State<FormasPagamentoScreen> createState() => _FormasPagamentoScreenState();
+}
+
+class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
+  final _formKey = GlobalKey<FormState>();
+
+  String tipoCartao = "Crédito";
+  final TextEditingController numeroController = TextEditingController();
+  final TextEditingController nomeController = TextEditingController();
+  final TextEditingController validadeController = TextEditingController();
+  final TextEditingController cvvController = TextEditingController();
+
+  bool isLoading = false;
+
+  Future<void> cadastrarPagamento() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      var url = Uri.parse("http://localhost:8080/app/pagamento.php");
+
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          //"usuario_id": widget.usuario.id,
+          "tipo_cartao": tipoCartao,
+          "numero_cartao": numeroController.text.trim(),
+          "nome_cartao": nomeController.text.trim(),
+          "validade": validadeController.text.trim(),
+          "cvv": cvvController.text.trim(),
+        }),
+      );
+
+      var data = jsonDecode(response.body);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(data["message"] ?? "Resposta inválida"),
+          backgroundColor: data["success"] == true ? Colors.green : Colors.red,
+        ),
+      );
+
+      if (data["success"] == true) {
+        // Limpar campos
+        numeroController.clear();
+        nomeController.clear();
+        validadeController.clear();
+        cvvController.clear();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro de comunicação: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Formas de Pagamento"),
+        centerTitle: true,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            UserAccountsDrawerHeader(
+              accountName: Text(widget.usuario.nome),
+              accountEmail: Text(widget.usuario.email),
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Text(
+                  widget.usuario.nome.isNotEmpty
+                      ? widget.usuario.nome[0].toUpperCase()
+                      : "?",
+                  style: const TextStyle(fontSize: 30, color: Colors.green),
+                ),
+              ),
+              decoration: const BoxDecoration(color: Colors.green),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text("Meus Dados"),
+              onTap: () {
+                Navigator.pop(context);
+                // Navegar para Meus Dados
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.credit_card),
+              title: const Text("Formas de Pagamento"),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text("Histórico de Serviços"),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Abrindo Histórico de serviços..."),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app),
+              title: const Text("Sair"),
+              onTap: () =>
+                  Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+          ],
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              // Escolha de tipo de cartão
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text("Crédito"),
+                    selected: tipoCartao == "Crédito",
+                    onSelected: (selected) =>
+                        setState(() => tipoCartao = "Crédito"),
+                  ),
+                  const SizedBox(width: 16),
+                  ChoiceChip(
+                    label: const Text("Débito"),
+                    selected: tipoCartao == "Débito",
+                    onSelected: (selected) =>
+                        setState(() => tipoCartao = "Débito"),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Campos do cartão
+              TextFormField(
+                controller: numeroController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Número do Cartão",
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => value == null || value.isEmpty
+                    ? "Informe o número do cartão"
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: nomeController,
+                decoration: const InputDecoration(
+                  labelText: "Nome no Cartão",
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => value == null || value.isEmpty
+                    ? "Informe o nome no cartão"
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: validadeController,
+                      keyboardType: TextInputType.datetime,
+                      decoration: const InputDecoration(
+                        labelText: "Validade (MM/AA)",
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) => value == null || value.isEmpty
+                          ? "Informe a validade"
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: cvvController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: "CVV",
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) => value == null || value.isEmpty
+                          ? "Informe o CVV"
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              ElevatedButton(
+                onPressed: isLoading ? null : cadastrarPagamento,
+                child: isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("Cadastrar Cartão"),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+//=======================PRESTADORES POR CATEGORIAS
+class PrestadoresScreen extends StatefulWidget {
+  final String categoria;
+  const PrestadoresScreen({super.key, required this.categoria});
+
+  @override
+  State<PrestadoresScreen> createState() => _PrestadoresScreenState();
+}
+
+class _PrestadoresScreenState extends State<PrestadoresScreen> {
+  List prestadores = [];
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchPrestadores();
+  }
+
+  Future<void> fetchPrestadores() async {
+    try {
+      var url = Uri.parse(
+        "http://localhost:8080/app/getPrestadores.php",
+      ); // seu IP
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"categoria": widget.categoria}),
+      );
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+        if (data["success"]) {
+          setState(() {
+            prestadores = data["prestadores"];
+            loading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Erro: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Prestadores - ${widget.categoria}")),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : prestadores.isEmpty
+          ? const Center(child: Text("Nenhum prestador encontrado"))
+          : ListView.builder(
+              itemCount: prestadores.length,
+              itemBuilder: (context, index) {
+                final p = prestadores[index];
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.person),
+                    title: Text(p["nome"]),
+                    subtitle: Text(
+                      "Ocupação: ${p["ocupacao"]}\nTel: ${p["telefone"]}",
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
