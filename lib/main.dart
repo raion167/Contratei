@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:http/http.dart' as http;
@@ -23,6 +24,7 @@ class MyApp extends StatelessWidget {
 
 //=============== MODELO TESTE DE USUARIO
 class Usuario {
+  final int id;
   String nome;
   String email;
   String cpf;
@@ -32,6 +34,7 @@ class Usuario {
   String? fotoPath;
 
   Usuario({
+    required this.id,
     required this.nome,
     required this.email,
     required this.cpf,
@@ -40,6 +43,18 @@ class Usuario {
     this.ocupacao,
     this.fotoPath,
   });
+
+  factory Usuario.fromJson(Map<String, dynamic> json) {
+    return Usuario(
+      id: int.parse(json["id"].toString()),
+      nome: json["nome"],
+      email: json["email"],
+      cpf: json["cpf"],
+      telefone: json["telefone"],
+      tipoUsuario: json["tipoUsuario"],
+      ocupacao: json["ocupacao"],
+    );
+  }
 }
 
 class AuthPage extends StatefulWidget {
@@ -136,6 +151,7 @@ class _LoginFormState extends State<LoginForm> {
             MaterialPageRoute(
               builder: (_) => HomeScreen(
                 usuario: Usuario(
+                  id: user['id'],
                   nome: user['nome'],
                   email: user['email'],
                   cpf: user['cpf'],
@@ -540,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
 class MeuPerfilScreen extends StatelessWidget {
   final Usuario usuario;
   const MeuPerfilScreen({super.key, required this.usuario});
-
+  //=============== MENU LATERAL =======================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -620,7 +636,7 @@ class MeuPerfilScreen extends StatelessWidget {
   }
 }
 
-// =================== MEUS DADOS ==================
+// =================== MEUS DADOS ==============================================
 class MeusDadosScreen extends StatefulWidget {
   final Usuario usuario;
 
@@ -755,7 +771,7 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
   }
 }
 
-// ====================== TELA DE FORMAS DE PAGAMENTO
+// ====================== TELA DE FORMAS DE PAGAMENTO ================================
 
 class FormasPagamentoScreen extends StatefulWidget {
   final Usuario usuario;
@@ -775,7 +791,10 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
   final TextEditingController cvvController = TextEditingController();
 
   bool isLoading = false;
+  bool isLoadingCartoes = true;
+  List<dynamic> meusCartoes = [];
 
+  // ====================== CADASTRAR CARTÕES =============================================
   Future<void> cadastrarPagamento() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -784,13 +803,15 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
     });
 
     try {
-      var url = Uri.parse("http://localhost:8080/app/pagamento.php");
+      var url = Uri.parse(
+        "http://localhost:8080/app/pagamento.php",
+      ); // Android Emulator
 
       var response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          //"usuario_id": widget.usuario.id,
+          "usuario_id": widget.usuario.id,
           "tipo_cartao": tipoCartao,
           "numero_cartao": numeroController.text.trim(),
           "nome_cartao": nomeController.text.trim(),
@@ -814,6 +835,9 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
         nomeController.clear();
         validadeController.clear();
         cvvController.clear();
+
+        // Recarregar cartões cadastrados
+        carregarCartoes();
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -829,6 +853,49 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
     }
   }
 
+  // ===================== CARREGAR CARTÕES CADASTRADOS ========================
+  Future<void> carregarCartoes() async {
+    setState(() {
+      isLoadingCartoes = true;
+    });
+
+    try {
+      var url = Uri.parse(
+        "http://localhost:8080/app/listar_pagamentos.php",
+      ); // Android Emulator
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"usuario_id": widget.usuario.id}),
+      );
+
+      var data = jsonDecode(response.body);
+
+      if (data["success"] == true) {
+        setState(() {
+          meusCartoes = data["cards"];
+        });
+      } else {
+        setState(() {
+          meusCartoes = [];
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar cartões: $e");
+    } finally {
+      setState(() {
+        isLoadingCartoes = false;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    carregarCartoes();
+  }
+
+  //============ INTERFACE DO MENU LATERAL ===========================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -859,13 +926,27 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
               title: const Text("Meus Dados"),
               onTap: () {
                 Navigator.pop(context);
-                // Navegar para Meus Dados
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MeusDadosScreen(usuario: widget.usuario),
+                  ),
+                );
               },
             ),
             ListTile(
               leading: const Icon(Icons.credit_card),
               title: const Text("Formas de Pagamento"),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        FormasPagamentoScreen(usuario: widget.usuario),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.history),
@@ -891,96 +972,331 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // Escolha de tipo de cartão
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          children: [
+            Form(
+              key: _formKey,
+              child: Column(
                 children: [
-                  ChoiceChip(
-                    label: const Text("Crédito"),
-                    selected: tipoCartao == "Crédito",
-                    onSelected: (selected) =>
-                        setState(() => tipoCartao = "Crédito"),
+                  // Escolha de tipo de cartão
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: const Text("Crédito"),
+                        selected: tipoCartao == "Crédito",
+                        onSelected: (selected) =>
+                            setState(() => tipoCartao = "Crédito"),
+                      ),
+                      const SizedBox(width: 16),
+                      ChoiceChip(
+                        label: const Text("Débito"),
+                        selected: tipoCartao == "Débito",
+                        onSelected: (selected) =>
+                            setState(() => tipoCartao = "Débito"),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  ChoiceChip(
-                    label: const Text("Débito"),
-                    selected: tipoCartao == "Débito",
-                    onSelected: (selected) =>
-                        setState(() => tipoCartao = "Débito"),
+                  const SizedBox(height: 20),
+
+                  // Campos do cartão
+                  TextFormField(
+                    controller: numeroController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: "Número do Cartão",
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value == null || value.isEmpty
+                        ? "Informe o número do cartão"
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: nomeController,
+                    decoration: const InputDecoration(
+                      labelText: "Nome no Cartão",
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value == null || value.isEmpty
+                        ? "Informe o nome no cartão"
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: validadeController,
+                          keyboardType: TextInputType.datetime,
+                          decoration: const InputDecoration(
+                            labelText: "Validade (MM/AA)",
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) => value == null || value.isEmpty
+                              ? "Informe a validade"
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          controller: cvvController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: "CVV",
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) => value == null || value.isEmpty
+                              ? "Informe o CVV"
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  ElevatedButton(
+                    onPressed: isLoading ? null : cadastrarPagamento,
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text("Cadastrar Cartão"),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+            ),
+            const SizedBox(height: 30),
 
-              // Campos do cartão
-              TextFormField(
-                controller: numeroController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Número do Cartão",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => value == null || value.isEmpty
-                    ? "Informe o número do cartão"
-                    : null,
+            // ============ LISTA DE CARTÕES ============
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                "Meus Cartões",
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: nomeController,
-                decoration: const InputDecoration(
-                  labelText: "Nome no Cartão",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => value == null || value.isEmpty
-                    ? "Informe o nome no cartão"
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: validadeController,
-                      keyboardType: TextInputType.datetime,
-                      decoration: const InputDecoration(
-                        labelText: "Validade (MM/AA)",
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) => value == null || value.isEmpty
-                          ? "Informe a validade"
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: cvvController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "CVV",
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) => value == null || value.isEmpty
-                          ? "Informe o CVV"
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 10),
 
-              ElevatedButton(
-                onPressed: isLoading ? null : cadastrarPagamento,
-                child: isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("Cadastrar Cartão"),
-              ),
-            ],
-          ),
+            isLoadingCartoes
+                ? const Center(child: CircularProgressIndicator())
+                : meusCartoes.isEmpty
+                ? const Text("Nenhum cartão cadastrado ainda")
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: meusCartoes.length,
+                    itemBuilder: (context, index) {
+                      final card = meusCartoes[index];
+                      String numero = card["numero_cartao"]?.toString() ?? "";
+                      String ultimosDigitos = numero.length >= 4
+                          ? numero.substring(numero.length - 4)
+                          : numero; // se tiver menos de 4 dígitos, mostra o que tem
+                      return Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        child: ListTile(
+                          leading: Icon(
+                            card["tipo_cartao"] == "Crédito"
+                                ? Icons.credit_card
+                                : Icons.payment,
+                            color: Colors.blue,
+                          ),
+                          title: Text(
+                            "${card["tipo_cartao"]} - **** **** **** $ultimosDigitos",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            "${card["nome_cartao"]} | Validade: ${card["validade"]}",
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => EditarCartaoScreen(
+                                  card: card,
+                                  onAtualizar: carregarCartoes,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ========================== TELA DE EDIÇÃO E DELETAR CARTÕES =============================
+class EditarCartaoScreen extends StatefulWidget {
+  final Map<String, dynamic> card;
+  final VoidCallback onAtualizar;
+
+  const EditarCartaoScreen({
+    super.key,
+    required this.card,
+    required this.onAtualizar,
+  });
+
+  @override
+  State<EditarCartaoScreen> createState() => _EditarCartaoScreenState();
+}
+
+class _EditarCartaoScreenState extends State<EditarCartaoScreen> {
+  late TextEditingController tipoController;
+  late TextEditingController numeroController;
+  late TextEditingController nomeController;
+  late TextEditingController validadeController;
+  late TextEditingController cvvController;
+
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    tipoController = TextEditingController(text: widget.card["tipo_cartao"]);
+    numeroController = TextEditingController(
+      text: widget.card["numero_cartao"],
+    );
+    nomeController = TextEditingController(text: widget.card["nome_cartao"]);
+    validadeController = TextEditingController(text: widget.card["validade"]);
+    cvvController = TextEditingController(text: widget.card["cvv"]);
+  }
+
+  Future<void> atualizarCartao() async {
+    setState(() => isLoading = true);
+    try {
+      var url = Uri.parse("http://localhost:8080/app/editar_cartao.php");
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "id": widget.card["id"],
+          "tipo_cartao": tipoController.text,
+          "numero_cartao": numeroController.text,
+          "nome_cartao": nomeController.text,
+          "validade": validadeController.text,
+          "cvv": cvvController.text,
+        }),
+      );
+
+      var data = jsonDecode(response.body);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(data["message"] ?? "Resposta inválida"),
+          backgroundColor: data["success"] == true ? Colors.green : Colors.red,
+        ),
+      );
+
+      if (data["success"] == true) {
+        widget.onAtualizar();
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro de comunicação: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> deletarCartao() async {
+    setState(() => isLoading = true);
+    try {
+      var url = Uri.parse("http://localhost:8080/app/deletar_cartao.php");
+      var response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"id": widget.card["id"]}),
+      );
+
+      var data = jsonDecode(response.body);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(data["message"] ?? "Resposta inválida"),
+          backgroundColor: data["success"] == true ? Colors.green : Colors.red,
+        ),
+      );
+
+      if (data["success"] == true) {
+        widget.onAtualizar();
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro de comunicação: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Editar Cartão")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: tipoController,
+              decoration: const InputDecoration(labelText: "Tipo do Cartão"),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: numeroController,
+              decoration: const InputDecoration(labelText: "Número do Cartão"),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nomeController,
+              decoration: const InputDecoration(labelText: "Nome no Cartão"),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: validadeController,
+              decoration: const InputDecoration(labelText: "Validade (MM/AA)"),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: cvvController,
+              decoration: const InputDecoration(labelText: "CVV"),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: isLoading ? null : atualizarCartao,
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Atualizar"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: isLoading ? null : deletarCartao,
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Deletar"),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
