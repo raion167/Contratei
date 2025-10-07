@@ -1,8 +1,12 @@
+import 'package:contratei/cadastrar_servico_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'lista_prestadores_page.dart';
+import 'prestador_detalhes_page.dart';
+import 'basescreen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -15,7 +19,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Login App',
+      title: 'Contratei',
       theme: ThemeData(primarySwatch: Colors.green),
       home: const AuthPage(),
     );
@@ -144,23 +148,22 @@ class _LoginFormState extends State<LoginForm> {
             context,
           ).showSnackBar(SnackBar(content: Text(data['message'])));
 
-          // navegar para HomeScreen com dados do usuário
+          // dados do usuário
           var user = data['usuario'];
-          Navigator.push(
+          Usuario usuario = Usuario(
+            id: user['id'],
+            nome: user['nome'],
+            email: user['email'],
+            cpf: user['cpf'],
+            telefone: user['telefone'],
+            tipoUsuario: user['tipoUsuario'],
+            ocupacao: user['ocupacao'],
+          );
+
+          // 🔹 Abrir BaseScreen em vez do HomeScreen
+          Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (_) => HomeScreen(
-                usuario: Usuario(
-                  id: user['id'],
-                  nome: user['nome'],
-                  email: user['email'],
-                  cpf: user['cpf'],
-                  telefone: user['telefone'],
-                  tipoUsuario: user['tipoUsuario'],
-                  ocupacao: user['ocupacao'],
-                ),
-              ),
-            ),
+            MaterialPageRoute(builder: (_) => BaseScreen(usuario: usuario)),
           );
         } else {
           ScaffoldMessenger.of(
@@ -299,7 +302,8 @@ class _RegisterFormState extends State<CadastroScreen> {
               : "",
         }),
       );
-
+      print("STATUS: ${response.statusCode}");
+      print("BODY: ${response.body}");
       var data = jsonDecode(response.body);
 
       if (data["success"]) {
@@ -489,12 +493,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         final categoria = filteredCategorias[index];
                         return GestureDetector(
                           onTap: () {
-                            // 👇 abre a tela de prestadores com a categoria escolhida
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    PrestadoresScreen(categoria: categoria),
+                                    ListaPrestadoresPage(ocupacao: categoria),
                               ),
                             );
                           },
@@ -506,6 +509,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Center(
                               child: Text(
                                 categoria,
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -519,34 +523,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.green,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-
-          if (index == 0) {
-            // já está na Home
-          } else if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MeuPerfilScreen(usuario: widget.usuario),
-              ),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Início"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Meu Perfil",
-          ),
-        ],
       ),
     );
   }
@@ -603,6 +579,23 @@ class MeuPerfilScreen extends StatelessWidget {
                 );
               },
             ),
+            if (usuario.tipoUsuario == "Prestador") ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.build),
+                title: const Text("Cadastrar Serviços"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CadastrarServicoPage(usuario: usuario),
+                    ),
+                  );
+                },
+              ),
+            ],
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.history),
               title: const Text("Histórico de Serviços"),
@@ -619,8 +612,13 @@ class MeuPerfilScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.exit_to_app),
               title: const Text("Sair"),
-              onTap: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
+              onTap: () async {
+                Navigator.pop(context);
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AuthPage()),
+                  (route) => false,
+                );
               },
             ),
           ],
@@ -636,7 +634,7 @@ class MeuPerfilScreen extends StatelessWidget {
   }
 }
 
-// =================== MEUS DADOS ==============================================
+// ========================== MEUS DADOS ==============================================
 class MeusDadosScreen extends StatefulWidget {
   final Usuario usuario;
 
