@@ -1,3 +1,4 @@
+import 'package:contratei/perfil_menu_screen.dart';
 import 'package:flutter/material.dart';
 import 'main.dart';
 
@@ -19,7 +20,7 @@ class _BaseScreenState extends State<BaseScreen> {
     super.initState();
     _pages = [
       HomeScreen(usuario: widget.usuario),
-      MeuPerfilScreen(usuario: widget.usuario),
+      PerfilMenuScreen(usuario: widget.usuario),
     ];
   }
 
@@ -32,17 +33,15 @@ class _BaseScreenState extends State<BaseScreen> {
     return Scaffold(
       body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: const Color(0xFFFF4E00),
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.green,
-        unselectedItemColor: Colors.grey,
+        selectedItemColor: Colors.white,
+        unselectedItemColor: Colors.black54,
         onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Início"),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Perfil"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: "Histórico",
-          ),
         ],
       ),
     );

@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
-import 'prestador_detalhes_page.dart'; // 🔹 certifique-se do caminho correto
+import 'prestador_detalhes_page.dart';
+import 'config/api.dart';
 
 class ListaPrestadoresPage extends StatefulWidget {
   final String ocupacao;
@@ -13,7 +13,7 @@ class ListaPrestadoresPage extends StatefulWidget {
 }
 
 class _ListaPrestadoresPageState extends State<ListaPrestadoresPage> {
-  List prestadores = [];
+  List<Map<String, dynamic>> prestadores = [];
   bool carregando = true;
 
   @override
@@ -24,123 +24,154 @@ class _ListaPrestadoresPageState extends State<ListaPrestadoresPage> {
 
   Future<void> fetchPrestadores() async {
     try {
-      var url = Uri.parse(
-        "http://localhost:8080/app/getPrestadores.php?ocupacao=${Uri.encodeComponent(widget.ocupacao)}",
+      final url = Uri.parse(
+        "${ApiConfig.baseUrl}/getPrestadores.php=${Uri.encodeComponent(widget.ocupacao)}",
       );
-      var response = await http.get(url);
+
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+
         if (data["success"]) {
           setState(() {
             prestadores = List<Map<String, dynamic>>.from(data["prestadores"]);
           });
         } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(data["message"])));
+          _showMsg(data["message"] ?? "Erro ao carregar prestadores");
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Erro ao buscar prestadores: ${response.statusCode}"),
-          ),
-        );
+        _showMsg("Erro HTTP: ${response.statusCode}");
       }
     } catch (e) {
-      print("Erro ao buscar prestadores: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao buscar prestadores: $e")));
+      _showMsg("Erro: $e");
     } finally {
-      setState(() {
-        carregando = false;
-      });
+      setState(() => carregando = false);
     }
   }
 
-  void abrirContato(String telefone, String email) async {
-    final Uri telUri = Uri(scheme: 'tel', path: telefone);
-    final Uri emailUri = Uri(scheme: 'mailto', path: email);
-
-    if (await canLaunchUrl(telUri)) {
-      await launchUrl(telUri);
-    } else if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Não foi possível abrir contato")),
-      );
-    }
+  void _showMsg(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Prestadores: ${widget.ocupacao}")),
+      backgroundColor: const Color(0xFFF6F6F6),
+      appBar: AppBar(
+        title: Text(widget.ocupacao),
+        backgroundColor: const Color(0xFFFF4E00),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
       body: carregando
           ? const Center(child: CircularProgressIndicator())
           : prestadores.isEmpty
           ? const Center(child: Text("Nenhum prestador encontrado"))
           : ListView.builder(
+              padding: const EdgeInsets.all(16),
               itemCount: prestadores.length,
               itemBuilder: (context, index) {
                 final p = prestadores[index];
-                final fotoUrl = p["foto"] != ""
-                    ? "http://localhost:8080/app/uploads/${p["foto"]}"
-                    : "https://via.placeholder.com/150";
 
-                return GestureDetector(
+                return InkWell(
+                  borderRadius: BorderRadius.circular(18),
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => PrestadorDetalhesPage(
-                          prestador: Map<String, dynamic>.from(p),
-                        ),
+                        builder: (_) => PrestadorDetalhesPage(prestador: p),
                       ),
                     );
                   },
-                  child: Card(
-                    margin: const EdgeInsets.all(8),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: NetworkImage(fotoUrl),
-                        radius: 30,
-                      ),
-                      title: Text(p["nome"]),
-                      subtitle: Text(p["ocupacao"]),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.info),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: Text(p["nome"]),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 8,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ===== AVATAR =====
+                        CircleAvatar(
+                          radius: 35,
+                          backgroundColor: Colors.orange.shade100,
+                          child: const Icon(
+                            Icons.person,
+                            size: 36,
+                            color: Colors.orange,
+                          ),
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        // ===== DADOS =====
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                p["nome"] ?? "",
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                p["ocupacao"] ?? "",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
                                 children: [
-                                  Text("Telefone: ${p["telefone"]}"),
-                                  Text("Email: ${p["email"]}"),
+                                  const Icon(
+                                    Icons.star,
+                                    size: 16,
+                                    color: Colors.orange,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    p["avaliacao"]?.toString() ?? "4.8",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    "Disponível",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                 ],
                               ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text("Fechar"),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    abrirContato(p["telefone"], p["email"]);
-                                  },
-                                  child: const Text("Entrar em contato"),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                            ],
+                          ),
+                        ),
+
+                        // ===== SETA =====
+                        const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
+                      ],
                     ),
                   ),
                 );

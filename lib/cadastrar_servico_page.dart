@@ -1,8 +1,8 @@
 import 'package:contratei/main.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'config/api.dart';
 
 class CadastrarServicoPage extends StatefulWidget {
   final Usuario usuario;
@@ -22,24 +22,24 @@ class _CadastrarServicoPageState extends State<CadastrarServicoPage> {
   Future<void> cadastrarServico() async {
     if (!_formKey.currentState!.validate()) return;
 
-    var url = Uri.parse("http://localhost:8080/app/cadastrar_servico.php");
+    final url = Uri.parse("${ApiConfig.baseUrl}/cadastrar_servico.php");
 
-    var response = await http.post(
+    final response = await http.post(
       url,
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
+      body: {
         "prestador_id": widget.usuario.id,
         "nome_servico": nomeController.text,
         "descricao": descricaoController.text,
         "preco": double.parse(precoController.text),
-      }),
+      },
     );
 
-    var data = jsonDecode(response.body);
+    final data = jsonDecode(response.body);
 
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(data["message"])));
+
     if (data["success"]) {
       nomeController.clear();
       descricaoController.clear();
@@ -47,48 +47,114 @@ class _CadastrarServicoPageState extends State<CadastrarServicoPage> {
     }
   }
 
+  InputDecoration _inputDecoration(String label, {IconData? icon}) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: icon != null
+          ? Icon(icon, color: const Color(0xFFFF4E00))
+          : null,
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Cadastrar Serviço")),
-      body: Padding(
+      backgroundColor: const Color(0xFFF6F6F6),
+      appBar: AppBar(
+        title: const Text("Cadastrar Serviço"),
+        backgroundColor: const Color(0xFFFF4E00),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: nomeController,
-                decoration: const InputDecoration(labelText: "Nome do Serviço"),
-                validator: (v) =>
-                    v!.isEmpty ? "Informe o nome do serviço" : null,
-              ),
-              TextFormField(
-                controller: descricaoController,
-                decoration: const InputDecoration(labelText: "Descrição"),
-                maxLines: 2,
-              ),
-              TextFormField(
-                controller: precoController,
-                decoration: const InputDecoration(labelText: "Valor (R\$)"),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: (v) => v!.isEmpty ? "Informe o valor" : null,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: cadastrarServico,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 50,
-                    vertical: 12,
+          child: Card(
+            elevation: 6,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Informações do Serviço",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                ),
-                child: const Text("Cadastrar", style: TextStyle(fontSize: 18)),
+
+                  const SizedBox(height: 20),
+
+                  TextFormField(
+                    controller: nomeController,
+                    decoration: _inputDecoration(
+                      "Nome do serviço",
+                      icon: Icons.build,
+                    ),
+                    validator: (v) =>
+                        v!.isEmpty ? "Informe o nome do serviço" : null,
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  TextFormField(
+                    controller: descricaoController,
+                    maxLines: 3,
+                    decoration: _inputDecoration(
+                      "Descrição",
+                      icon: Icons.description,
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  TextFormField(
+                    controller: precoController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: _inputDecoration(
+                      "Valor (R\$)",
+                      icon: Icons.attach_money,
+                    ),
+                    validator: (v) => v!.isEmpty ? "Informe o valor" : null,
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: cadastrarServico,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF4E00),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 4,
+                      ),
+                      child: const Text(
+                        "Cadastrar Serviço",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

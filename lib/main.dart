@@ -1,4 +1,6 @@
 import 'package:contratei/cadastrar_servico_page.dart';
+import 'package:contratei/config/api.dart';
+import 'package:contratei/prestador_catalogo_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
@@ -7,6 +9,8 @@ import 'dart:convert';
 import 'lista_prestadores_page.dart';
 import 'prestador_detalhes_page.dart';
 import 'basescreen.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 void main() {
   runApp(const MyApp());
@@ -20,7 +24,28 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Contratei',
-      theme: ThemeData(primarySwatch: Colors.green),
+      theme: ThemeData(
+        primaryColor: const Color(0xFFFF4E00),
+
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 14,
+            horizontal: 16,
+          ),
+
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Colors.white),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
       home: const AuthPage(),
     );
   }
@@ -75,8 +100,12 @@ class _AuthPageState extends State<AuthPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFF4E00),
       appBar: AppBar(
-        title: Text(showLogin ? "Entrar" : "Cadastrar"),
+        backgroundColor: const Color(0xFFFF4E00),
+        foregroundColor: Colors.white,
+
+        titleTextStyle: TextStyle(color: Colors.white),
         centerTitle: true,
       ),
       body: Center(
@@ -84,7 +113,12 @@ class _AuthPageState extends State<AuthPage> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
+              // ⭐ LOGO AQUI
+              Image.asset("assets/images/logo.png", width: 350),
+              const SizedBox(height: 30),
+
               showLogin ? const LoginForm() : const CadastroScreen(),
+
               const SizedBox(height: 20),
               TextButton(
                 onPressed: () {
@@ -96,6 +130,10 @@ class _AuthPageState extends State<AuthPage> {
                   showLogin
                       ? "Não tem conta? Cadastre-se"
                       : "Já tem conta? Entre",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -129,18 +167,22 @@ class _LoginFormState extends State<LoginForm> {
     }
 
     try {
-      var url = Uri.parse("http://localhost:8080/app/login.php"); // Flutter Web
+      // Flutter Web
 
-      var response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "email": emailController.text.trim(),
-          "senha": senhaController.text.trim(),
+      final response = await http.post(
+        Uri.parse("https://contratei.infinityfreeapp.com/app/login.php"),
+        body: {
+          "email": emailController.text,
+          "senha": senhaController.text,
           "tipoUsuario": tipoUsuario,
-        }),
+        },
       );
 
+      if (!response.body.trim().startsWith("{")) {
+        debugPrint("Resposta inválida:");
+        debugPrint(response.body);
+        throw Exception("Servidor não retornou JSON");
+      }
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
         if (data['success']) {
@@ -200,15 +242,18 @@ class _LoginFormState extends State<LoginForm> {
           decoration: const InputDecoration(labelText: "Senha"),
         ),
         const SizedBox(height: 20),
-        const Text("Selecione o tipo de usuário:"),
         const SizedBox(height: 10),
         Center(
           child: ToggleButtons(
-            borderRadius: BorderRadius.circular(12),
-            fillColor: Colors.green,
-            selectedColor: Colors.white,
-            color: Colors.black,
             isSelected: isSelected,
+            borderRadius: BorderRadius.circular(12),
+
+            fillColor: Colors.white, // fundo branco quando selecionado
+            color: Colors.black, // letra preta quando não selecionado
+            selectedColor: Colors.black, // letra preta quando selecionado
+            borderColor: Colors.grey, // borda padrão
+            selectedBorderColor: Colors.grey, // borda quando selecionado
+
             onPressed: (index) {
               setState(() {
                 for (int i = 0; i < isSelected.length; i++) {
@@ -218,11 +263,11 @@ class _LoginFormState extends State<LoginForm> {
             },
             children: const [
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Text("Contratante"),
               ),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Text("Prestador"),
               ),
             ],
@@ -230,7 +275,14 @@ class _LoginFormState extends State<LoginForm> {
         ),
         const SizedBox(height: 20),
         Center(
-          child: ElevatedButton(onPressed: login, child: const Text("Entrar")),
+          child: ElevatedButton(
+            onPressed: login,
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Colors.black,
+              backgroundColor: Colors.white,
+            ),
+            child: const Text("Entrar"),
+          ),
         ),
       ],
     );
@@ -265,7 +317,7 @@ class _RegisterFormState extends State<CadastroScreen> {
 
   Future<void> fetchCategorias() async {
     try {
-      var url = Uri.parse("http://localhost:8080/app/getCategorias.php");
+      final url = Uri.parse("${ApiConfig.baseUrl}/getCategorias.php");
       var response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -285,12 +337,11 @@ class _RegisterFormState extends State<CadastroScreen> {
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
 
     try {
-      var url = Uri.parse("http://localhost:8080/app/cadastro.php");
+      final url = Uri.parse("${ApiConfig.baseUrl}/cadastro.php");
 
       var response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
+        body: {
           "nome": nomeController.text.trim(),
           "email": emailController.text.trim(),
           "senha": senhaController.text.trim(),
@@ -300,10 +351,8 @@ class _RegisterFormState extends State<CadastroScreen> {
           "ocupacao": tipoUsuario == "Prestador"
               ? ocupacaoSelecionada ?? ""
               : "",
-        }),
+        },
       );
-      print("STATUS: ${response.statusCode}");
-      print("BODY: ${response.body}");
       var data = jsonDecode(response.body);
 
       if (data["success"]) {
@@ -338,6 +387,11 @@ class _RegisterFormState extends State<CadastroScreen> {
       child: Column(
         children: [
           ToggleButtons(
+            fillColor: Colors.white, // fundo branco quando selecionado
+            color: Colors.black, // letra preta quando não selecionado
+            selectedColor: Colors.black, // letra preta quando selecionado
+            borderColor: Colors.grey, // borda padrão
+            selectedBorderColor: Colors.grey, // borda quando s
             borderRadius: BorderRadius.circular(12),
             isSelected: isSelected,
             onPressed: (index) {
@@ -358,27 +412,33 @@ class _RegisterFormState extends State<CadastroScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
           TextField(
             controller: nomeController,
             decoration: const InputDecoration(labelText: "Nome"),
           ),
+          const SizedBox(height: 12),
           TextField(
             controller: emailController,
             decoration: const InputDecoration(labelText: "Email"),
           ),
+          const SizedBox(height: 12),
           TextField(
             controller: senhaController,
             obscureText: true,
             decoration: const InputDecoration(labelText: "Senha"),
           ),
+          const SizedBox(height: 12),
           TextField(
             controller: cpfController,
             decoration: const InputDecoration(labelText: "CPF"),
           ),
+          const SizedBox(height: 12),
           TextField(
             controller: telefoneController,
             decoration: const InputDecoration(labelText: "Telefone"),
           ),
+          const SizedBox(height: 12),
 
           // 🔽 Dropdown carregado do banco
           if (tipoUsuario == "Prestador")
@@ -404,6 +464,10 @@ class _RegisterFormState extends State<CadastroScreen> {
           ElevatedButton(
             onPressed: cadastrarUsuario,
             child: const Text("Cadastrar"),
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Colors.black,
+              backgroundColor: Colors.white,
+            ),
           ),
         ],
       ),
@@ -423,7 +487,23 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  List<String> allCategorias = []; // 🔽 Agora vem do banco
+  // MAPA DE IMAGENS → sempre em minúsculo para evitar erro
+  final Map<String, String> categoriaImagens = {
+    "eletricista": "assets/categorias/eletricista.png",
+    "pedreiro": "assets/categorias/pedreiro.png",
+    "pintor": "assets/categorias/pintor.png",
+    "encanador": "assets/categorias/encanador.png",
+    "marceneiro": "assets/categorias/marceneiro.png",
+    "barbearia": "assets/categorias/barbearia.jpg",
+    "cozinheira": "assets/categorias/cozinheira.jpg",
+    "desenvolvedor": "assets/categorias/desenvolvedor.png",
+    "entretenimento": "assets/categorias/entretenimento.jpg",
+    "garçom": "assets/categorias/garcom.jpg",
+    "serralheria": "assets/categorias/serralheria.jpg",
+    "manicure / pedicure": "assets/categorias/manicure.jpg",
+  };
+
+  List<String> allCategorias = [];
   List<String> filteredCategorias = [];
   bool loading = true;
 
@@ -435,7 +515,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> fetchCategorias() async {
     try {
-      var url = Uri.parse("http://localhost:8080/app/getCategorias.php");
+      final url = Uri.parse("${ApiConfig.baseUrl}/getCategorias.php");
       var response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -464,16 +544,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Página Inicial"), centerTitle: true),
+      backgroundColor: const Color(0xFFFF4E00), // fundo laranja
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: loading
-            ? const Center(child: CircularProgressIndicator()) // 🔄 loading
+            ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
                   TextField(
                     onChanged: filterCategorias,
                     decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
                       hintText: "Pesquisar Categorias...",
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
@@ -482,6 +564,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // 🔽 GRID COM IMAGEM + NOME
                   Expanded(
                     child: GridView.count(
                       crossAxisCount: 2,
@@ -491,6 +575,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         index,
                       ) {
                         final categoria = filteredCategorias[index];
+
+                        // Converte nome vindo do banco para minúsculo
+                        final chave = categoria.toLowerCase();
+
                         return GestureDetector(
                           onTap: () {
                             Navigator.push(
@@ -503,16 +591,51 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.green.shade200,
-                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            child: Center(
-                              child: Text(
-                                categoria,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                image: DecorationImage(
+                                  image: AssetImage(
+                                    categoriaImagens[chave] ??
+                                        "assets/categorias/pintor.png",
+                                  ),
+                                  fit: BoxFit
+                                      .cover, // 👉 preenche tudo sem recortar errado
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+
+                              // FADE PRETO PARA LER O TEXTO EM CIMA DA IMAGEM
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  color: Colors.black.withOpacity(0.45),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  categoria,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
@@ -635,6 +758,7 @@ class MeuPerfilScreen extends StatelessWidget {
 }
 
 // ========================== MEUS DADOS ==============================================
+
 class MeusDadosScreen extends StatefulWidget {
   final Usuario usuario;
 
@@ -651,12 +775,13 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
   late TextEditingController telefoneController;
   late TextEditingController ocupacaoController;
 
-  String? fotoPerfilPath;
+  File? fotoPerfil;
+
+  final picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    // inicializa os controllers com os valores do usuário (evita null)
     nomeController = TextEditingController(text: widget.usuario.nome);
     emailController = TextEditingController(text: widget.usuario.email);
     cpfController = TextEditingController(text: widget.usuario.cpf);
@@ -664,12 +789,14 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
     ocupacaoController = TextEditingController(
       text: widget.usuario.ocupacao ?? "",
     );
-    fotoPerfilPath = widget.usuario.fotoPath;
+
+    if (widget.usuario.fotoPath != null) {
+      fotoPerfil = File(widget.usuario.fotoPath!);
+    }
   }
 
   @override
   void dispose() {
-    // sempre descartar controllers
     nomeController.dispose();
     emailController.dispose();
     cpfController.dispose();
@@ -678,89 +805,230 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
     super.dispose();
   }
 
-  void _salvarAlteracoes() {
-    // Atualiza o objeto usuário localmente (a persistência real fica a seu critério)
+  // ================= FOTO =================
+  Future<void> _selecionarFoto(ImageSource source) async {
+    final XFile? imagem = await picker.pickImage(
+      source: source,
+      imageQuality: 75,
+    );
+
+    if (imagem != null) {
+      setState(() {
+        fotoPerfil = File(imagem.path);
+        widget.usuario.fotoPath = imagem.path; // salva localmente
+      });
+    }
+  }
+
+  void _mostrarOpcoesFoto() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text("Tirar foto"),
+              onTap: () {
+                Navigator.pop(context);
+                _selecionarFoto(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text("Escolher da galeria"),
+              onTap: () {
+                Navigator.pop(context);
+                _selecionarFoto(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================= SALVAR =================
+  void salvar() {
     widget.usuario.nome = nomeController.text;
-    widget.usuario.email = emailController.text;
-    widget.usuario.cpf = cpfController.text;
     widget.usuario.telefone = telefoneController.text;
     widget.usuario.ocupacao = ocupacaoController.text.isEmpty
         ? null
         : ocupacaoController.text;
-    widget.usuario.fotoPath = fotoPerfilPath;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Dados atualizados!")));
-    // opcional: voltar para a tela anterior
-    // Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("✅ Dados atualizados com sucesso")),
+    );
+  }
+
+  Widget _campo({
+    required String label,
+    required TextEditingController controller,
+    TextInputType? teclado,
+    bool readOnly = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: controller,
+        keyboardType: teclado,
+        readOnly: readOnly,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: readOnly,
+          fillColor: readOnly ? Colors.grey.shade100 : null,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Meus Dados")),
+      backgroundColor: const Color(0xFFF6F6F6),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFF4E00),
+        foregroundColor: Colors.white,
+        centerTitle: true,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            GestureDetector(
-              onTap: () {
-                // implementar seleção de imagem se desejar (image_picker)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Alterar foto de perfil (implementar)"),
+            // ================= AVATAR =================
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
                   ),
-                );
-              },
-              child: CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.green.shade200,
-                backgroundImage: (fotoPerfilPath != null)
-                    ? AssetImage(fotoPerfilPath!)
-                    : null,
-                child: fotoPerfilPath == null
-                    ? const Icon(
-                        Icons.camera_alt,
-                        size: 40,
-                        color: Colors.white,
-                      )
-                    : null,
+                ],
+              ),
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: _mostrarOpcoesFoto,
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: const Color(0xFFFF4E00),
+                      backgroundImage: fotoPerfil != null
+                          ? FileImage(fotoPerfil!)
+                          : null,
+                      child: fotoPerfil == null
+                          ? Text(
+                              widget.usuario.nome.isNotEmpty
+                                  ? widget.usuario.nome[0].toUpperCase()
+                                  : "?",
+                              style: const TextStyle(
+                                fontSize: 40,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.usuario.nome,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    widget.usuario.tipoUsuario,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
               ),
             ),
+
             const SizedBox(height: 20),
-            TextField(
-              controller: nomeController,
-              decoration: const InputDecoration(labelText: "Nome"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(labelText: "Email"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: cpfController,
-              decoration: const InputDecoration(labelText: "CPF"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: telefoneController,
-              decoration: const InputDecoration(labelText: "Telefone"),
-            ),
-            const SizedBox(height: 10),
-            // mostra ocupação apenas para prestadores (exemplo)
-            if (widget.usuario.tipoUsuario == "Prestador") ...[
-              TextField(
-                controller: ocupacaoController,
-                decoration: const InputDecoration(labelText: "Ocupação"),
+
+            // ================= DADOS =================
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-            ],
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _salvarAlteracoes,
-              child: const Text("Salvar Alterações"),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Informações Pessoais",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _campo(label: "Nome", controller: nomeController),
+
+                  // 🔒 EMAIL READONLY
+                  _campo(
+                    label: "Email",
+                    controller: emailController,
+                    teclado: TextInputType.emailAddress,
+                    readOnly: true,
+                  ),
+
+                  // 🔒 CPF READONLY
+                  _campo(
+                    label: "CPF",
+                    controller: cpfController,
+                    teclado: TextInputType.number,
+                    readOnly: true,
+                  ),
+
+                  _campo(
+                    label: "Telefone",
+                    controller: telefoneController,
+                    teclado: TextInputType.phone,
+                  ),
+
+                  if (widget.usuario.tipoUsuario == "Prestador")
+                    _campo(label: "Ocupação", controller: ocupacaoController),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            // ================= SALVAR =================
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: salvar,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF4E00),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  "Salvar Alterações",
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
             ),
           ],
         ),
@@ -770,7 +1038,6 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
 }
 
 // ====================== TELA DE FORMAS DE PAGAMENTO ================================
-
 class FormasPagamentoScreen extends StatefulWidget {
   final Usuario usuario;
   const FormasPagamentoScreen({super.key, required this.usuario});
@@ -783,107 +1050,93 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
   final _formKey = GlobalKey<FormState>();
 
   String tipoCartao = "Crédito";
-  final TextEditingController numeroController = TextEditingController();
-  final TextEditingController nomeController = TextEditingController();
-  final TextEditingController validadeController = TextEditingController();
-  final TextEditingController cvvController = TextEditingController();
+  final numeroController = TextEditingController();
+  final nomeController = TextEditingController();
+  final validadeController = TextEditingController();
+  final cvvController = TextEditingController();
 
   bool isLoading = false;
   bool isLoadingCartoes = true;
   List<dynamic> meusCartoes = [];
 
-  // ====================== CADASTRAR CARTÕES =============================================
+  static const corPrincipal = Color(0xFFFF4E00);
+
+  InputDecoration _decoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: corPrincipal, width: 2),
+      ),
+    );
+  }
+
+  // ================= CADASTRAR CARTÃO =================
   Future<void> cadastrarPagamento() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      isLoading = true;
-    });
+    setState(() => isLoading = true);
 
     try {
-      var url = Uri.parse(
-        "http://localhost:8080/app/pagamento.php",
-      ); // Android Emulator
-
-      var response = await http.post(
+      final url = Uri.parse("${ApiConfig.baseUrl}/pagamento.php");
+      final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
+        body: {
           "usuario_id": widget.usuario.id,
           "tipo_cartao": tipoCartao,
-          "numero_cartao": numeroController.text.trim(),
-          "nome_cartao": nomeController.text.trim(),
-          "validade": validadeController.text.trim(),
-          "cvv": cvvController.text.trim(),
-        }),
+          "numero_cartao": numeroController.text,
+          "nome_cartao": nomeController.text,
+          "validade": validadeController.text,
+          "cvv": cvvController.text,
+        },
       );
 
-      var data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(data["message"] ?? "Resposta inválida"),
+          content: Text(data["message"] ?? "Erro"),
           backgroundColor: data["success"] == true ? Colors.green : Colors.red,
         ),
       );
 
       if (data["success"] == true) {
-        // Limpar campos
         numeroController.clear();
         nomeController.clear();
         validadeController.clear();
         cvvController.clear();
-
-        // Recarregar cartões cadastrados
         carregarCartoes();
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro de comunicação: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
     }
   }
 
-  // ===================== CARREGAR CARTÕES CADASTRADOS ========================
+  // ================= LISTAR CARTÕES =================
   Future<void> carregarCartoes() async {
-    setState(() {
-      isLoadingCartoes = true;
-    });
+    setState(() => isLoadingCartoes = true);
 
     try {
-      var url = Uri.parse(
-        "http://localhost:8080/app/listar_pagamentos.php",
-      ); // Android Emulator
-      var response = await http.post(
+      final url = Uri.parse("${ApiConfig.baseUrl}/listar_pagamentos.php");
+      final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"usuario_id": widget.usuario.id}),
+        body: {"usuario_id": widget.usuario.id},
       );
 
-      var data = jsonDecode(response.body);
-
-      if (data["success"] == true) {
-        setState(() {
-          meusCartoes = data["cards"];
-        });
-      } else {
-        setState(() {
-          meusCartoes = [];
-        });
-      }
-    } catch (e) {
-      debugPrint("Erro ao carregar cartões: $e");
+      final data = jsonDecode(response.body);
+      meusCartoes = data["success"] == true ? data["cards"] : [];
     } finally {
-      setState(() {
-        isLoadingCartoes = false;
-      });
+      setState(() => isLoadingCartoes = false);
     }
   }
 
@@ -893,179 +1146,146 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
     carregarCartoes();
   }
 
-  //============ INTERFACE DO MENU LATERAL ===========================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF6F6F6),
       appBar: AppBar(
         title: const Text("Formas de Pagamento"),
+        backgroundColor: corPrincipal,
+        foregroundColor: Colors.white,
         centerTitle: true,
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              accountName: Text(widget.usuario.nome),
-              accountEmail: Text(widget.usuario.email),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Text(
-                  widget.usuario.nome.isNotEmpty
-                      ? widget.usuario.nome[0].toUpperCase()
-                      : "?",
-                  style: const TextStyle(fontSize: 30, color: Colors.green),
-                ),
-              ),
-              decoration: const BoxDecoration(color: Colors.green),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text("Meus Dados"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => MeusDadosScreen(usuario: widget.usuario),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.credit_card),
-              title: const Text("Formas de Pagamento"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        FormasPagamentoScreen(usuario: widget.usuario),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text("Histórico de Serviços"),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Abrindo Histórico de serviços..."),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.exit_to_app),
-              title: const Text("Sair"),
-              onTap: () =>
-                  Navigator.of(context).popUntil((route) => route.isFirst),
-            ),
-          ],
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  // Escolha de tipo de cartão
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ChoiceChip(
-                        label: const Text("Crédito"),
-                        selected: tipoCartao == "Crédito",
-                        onSelected: (selected) =>
-                            setState(() => tipoCartao = "Crédito"),
-                      ),
-                      const SizedBox(width: 16),
-                      ChoiceChip(
-                        label: const Text("Débito"),
-                        selected: tipoCartao == "Débito",
-                        onSelected: (selected) =>
-                            setState(() => tipoCartao = "Débito"),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Campos do cartão
-                  TextFormField(
-                    controller: numeroController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Número do Cartão",
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) => value == null || value.isEmpty
-                        ? "Informe o número do cartão"
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: nomeController,
-                    decoration: const InputDecoration(
-                      labelText: "Nome no Cartão",
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) => value == null || value.isEmpty
-                        ? "Informe o nome no cartão"
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: validadeController,
-                          keyboardType: TextInputType.datetime,
-                          decoration: const InputDecoration(
-                            labelText: "Validade (MM/AA)",
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) => value == null || value.isEmpty
-                              ? "Informe a validade"
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: TextFormField(
-                          controller: cvvController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: "CVV",
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) => value == null || value.isEmpty
-                              ? "Informe o CVV"
-                              : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  ElevatedButton(
-                    onPressed: isLoading ? null : cadastrarPagamento,
-                    child: isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text("Cadastrar Cartão"),
+            // ================= FORM =================
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Cadastrar Cartão",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ChoiceChip(
+                          label: const Text("Crédito"),
+                          selected: tipoCartao == "Crédito",
+                          selectedColor: corPrincipal.withOpacity(0.2),
+                          onSelected: (_) =>
+                              setState(() => tipoCartao = "Crédito"),
+                        ),
+                        const SizedBox(width: 12),
+                        ChoiceChip(
+                          label: const Text("Débito"),
+                          selected: tipoCartao == "Débito",
+                          selectedColor: corPrincipal.withOpacity(0.2),
+                          onSelected: (_) =>
+                              setState(() => tipoCartao = "Débito"),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    TextFormField(
+                      controller: numeroController,
+                      decoration: _decoration("Número do cartão"),
+                      keyboardType: TextInputType.number,
+                      validator: (v) => v!.isEmpty ? "Informe o número" : null,
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextFormField(
+                      controller: nomeController,
+                      decoration: _decoration("Nome no cartão"),
+                      validator: (v) => v!.isEmpty ? "Informe o nome" : null,
+                    ),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: validadeController,
+                            decoration: _decoration("Validade"),
+                            validator: (v) =>
+                                v!.isEmpty ? "Informe a validade" : null,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: cvvController,
+                            decoration: _decoration("CVV"),
+                            keyboardType: TextInputType.number,
+                            validator: (v) =>
+                                v!.isEmpty ? "Informe o CVV" : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : cadastrarPagamento,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: corPrincipal,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : const Text(
+                                "Salvar Cartão",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
+
             const SizedBox(height: 30),
 
-            // ============ LISTA DE CARTÕES ============
+            // ================= LISTA =================
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -1073,41 +1293,42 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
 
             isLoadingCartoes
-                ? const Center(child: CircularProgressIndicator())
+                ? const CircularProgressIndicator()
                 : meusCartoes.isEmpty
-                ? const Text("Nenhum cartão cadastrado ainda")
+                ? const Text("Nenhum cartão cadastrado")
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: meusCartoes.length,
-                    itemBuilder: (context, index) {
-                      final card = meusCartoes[index];
-                      String numero = card["numero_cartao"]?.toString() ?? "";
-                      String ultimosDigitos = numero.length >= 4
-                          ? numero.substring(numero.length - 4)
-                          : numero; // se tiver menos de 4 dígitos, mostra o que tem
-                      return Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    itemBuilder: (_, i) {
+                      final card = meusCartoes[i];
+                      final numero = card["numero_cartao"].toString();
+                      final ultimos = numero.substring(numero.length - 4);
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 6,
+                              offset: Offset(0, 3),
+                            ),
+                          ],
                         ),
-                        margin: const EdgeInsets.symmetric(vertical: 6),
                         child: ListTile(
-                          leading: Icon(
-                            card["tipo_cartao"] == "Crédito"
-                                ? Icons.credit_card
-                                : Icons.payment,
-                            color: Colors.blue,
+                          leading: const Icon(
+                            Icons.credit_card,
+                            color: corPrincipal,
                           ),
-                          title: Text(
-                            "${card["tipo_cartao"]} - **** **** **** $ultimosDigitos",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                          title: Text("**** **** **** $ultimos"),
                           subtitle: Text(
-                            "${card["nome_cartao"]} | Validade: ${card["validade"]}",
+                            "${card["nome_cartao"]} • ${card["validade"]}",
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () {
@@ -1132,7 +1353,6 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
   }
 }
 
-// ========================== TELA DE EDIÇÃO E DELETAR CARTÕES =============================
 class EditarCartaoScreen extends StatefulWidget {
   final Map<String, dynamic> card;
   final VoidCallback onAtualizar;
@@ -1148,6 +1368,8 @@ class EditarCartaoScreen extends StatefulWidget {
 }
 
 class _EditarCartaoScreenState extends State<EditarCartaoScreen> {
+  static const corPrincipal = Color(0xFFFF4E00);
+
   late TextEditingController tipoController;
   late TextEditingController numeroController;
   late TextEditingController nomeController;
@@ -1168,27 +1390,49 @@ class _EditarCartaoScreenState extends State<EditarCartaoScreen> {
     cvvController = TextEditingController(text: widget.card["cvv"]);
   }
 
+  InputDecoration _decoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: corPrincipal, width: 2),
+      ),
+    );
+  }
+
+  // ================= ATUALIZAR CARTÃO =================
   Future<void> atualizarCartao() async {
     setState(() => isLoading = true);
+
     try {
-      var url = Uri.parse("http://localhost:8080/app/editar_cartao.php");
-      var response = await http.post(
+      final url = Uri.parse("${ApiConfig.baseUrl}/editar_cartao.php");
+      final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
+        body: {
           "id": widget.card["id"],
           "tipo_cartao": tipoController.text,
           "numero_cartao": numeroController.text,
           "nome_cartao": nomeController.text,
           "validade": validadeController.text,
           "cvv": cvvController.text,
-        }),
+        },
       );
 
-      var data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(data["message"] ?? "Resposta inválida"),
+          content: Text(data["message"] ?? "Erro"),
           backgroundColor: data["success"] == true ? Colors.green : Colors.red,
         ),
       );
@@ -1197,32 +1441,24 @@ class _EditarCartaoScreenState extends State<EditarCartaoScreen> {
         widget.onAtualizar();
         Navigator.pop(context);
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro de comunicação: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
       setState(() => isLoading = false);
     }
   }
 
+  // ================= DELETAR CARTÃO =================
   Future<void> deletarCartao() async {
     setState(() => isLoading = true);
-    try {
-      var url = Uri.parse("http://localhost:8080/app/deletar_cartao.php");
-      var response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"id": widget.card["id"]}),
-      );
 
-      var data = jsonDecode(response.body);
+    try {
+      final url = Uri.parse("${ApiConfig.baseUrl}/deletar_cartao.php");
+      final response = await http.post(url, body: {"id": widget.card["id"]});
+
+      final data = jsonDecode(response.body);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(data["message"] ?? "Resposta inválida"),
+          content: Text(data["message"] ?? "Erro"),
           backgroundColor: data["success"] == true ? Colors.green : Colors.red,
         ),
       );
@@ -1231,143 +1467,132 @@ class _EditarCartaoScreenState extends State<EditarCartaoScreen> {
         widget.onAtualizar();
         Navigator.pop(context);
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro de comunicação: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
       setState(() => isLoading = false);
     }
   }
 
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Editar Cartão")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: tipoController,
-              decoration: const InputDecoration(labelText: "Tipo do Cartão"),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: numeroController,
-              decoration: const InputDecoration(labelText: "Número do Cartão"),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: nomeController,
-              decoration: const InputDecoration(labelText: "Nome no Cartão"),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: validadeController,
-              decoration: const InputDecoration(labelText: "Validade (MM/AA)"),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: cvvController,
-              decoration: const InputDecoration(labelText: "CVV"),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: isLoading ? null : atualizarCartao,
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Atualizar"),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  onPressed: isLoading ? null : deletarCartao,
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Deletar"),
-                ),
-              ],
-            ),
-          ],
+      backgroundColor: const Color(0xFFF6F6F6),
+      appBar: AppBar(
+        title: const Text("Editar Cartão"),
+        backgroundColor: corPrincipal,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
-    );
-  }
-}
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Dados do Cartão",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
 
-//=======================PRESTADORES POR CATEGORIAS
-class PrestadoresScreen extends StatefulWidget {
-  final String categoria;
-  const PrestadoresScreen({super.key, required this.categoria});
+              TextField(
+                controller: tipoController,
+                decoration: _decoration("Tipo do Cartão"),
+                readOnly: true,
+              ),
+              const SizedBox(height: 12),
 
-  @override
-  State<PrestadoresScreen> createState() => _PrestadoresScreenState();
-}
+              TextField(
+                controller: numeroController,
+                decoration: _decoration("Número do Cartão"),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
 
-class _PrestadoresScreenState extends State<PrestadoresScreen> {
-  List prestadores = [];
-  bool loading = true;
+              TextField(
+                controller: nomeController,
+                decoration: _decoration("Nome no Cartão"),
+              ),
+              const SizedBox(height: 12),
 
-  @override
-  void initState() {
-    super.initState();
-    fetchPrestadores();
-  }
-
-  Future<void> fetchPrestadores() async {
-    try {
-      var url = Uri.parse(
-        "http://localhost:8080/app/getPrestadores.php",
-      ); // seu IP
-      var response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"categoria": widget.categoria}),
-      );
-
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        if (data["success"]) {
-          setState(() {
-            prestadores = data["prestadores"];
-            loading = false;
-          });
-        }
-      }
-    } catch (e) {
-      print("Erro: $e");
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Prestadores - ${widget.categoria}")),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : prestadores.isEmpty
-          ? const Center(child: Text("Nenhum prestador encontrado"))
-          : ListView.builder(
-              itemCount: prestadores.length,
-              itemBuilder: (context, index) {
-                final p = prestadores[index];
-                return Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.person),
-                    title: Text(p["nome"]),
-                    subtitle: Text(
-                      "Ocupação: ${p["ocupacao"]}\nTel: ${p["telefone"]}",
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: validadeController,
+                      decoration: _decoration("Validade"),
                     ),
                   ),
-                );
-              },
-            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: cvvController,
+                      decoration: _decoration("CVV"),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // BOTÕES
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : atualizarCartao,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: corPrincipal,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          "Salvar Alterações",
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: isLoading ? null : deletarCartao,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text("Excluir Cartão"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
