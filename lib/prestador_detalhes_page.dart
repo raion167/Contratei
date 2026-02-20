@@ -1,8 +1,9 @@
-import 'dart:convert';
+import 'package:contratei/checkout_page.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'chat_page.dart';
-import 'config/api.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+final contratante = Supabase.instance.client.auth.currentUser;
 
 class PrestadorDetalhesPage extends StatefulWidget {
   final Map prestador;
@@ -25,20 +26,17 @@ class _PrestadorDetalhesPageState extends State<PrestadorDetalhesPage> {
 
   Future<void> fetchServicos() async {
     try {
-      final url = Uri.parse(
-        "${ApiConfig.baseUrl}/listar_servicos.php=?prestador_id=${widget.prestador['id']}",
-      );
+      final supabase = Supabase.instance.client;
 
-      final response = await http.get(url);
+      final response = await supabase
+          .from('servicos')
+          .select()
+          .eq('prestador_id', widget.prestador['id'])
+          .order('created_at', ascending: false);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data["success"] == true) {
-          setState(() {
-            servicos = data["servicos"];
-          });
-        }
-      }
+      setState(() {
+        servicos = List<Map<String, dynamic>>.from(response);
+      });
     } catch (e) {
       debugPrint("Erro ao buscar serviços: $e");
     } finally {
@@ -289,32 +287,155 @@ class _PrestadorDetalhesPageState extends State<PrestadorDetalhesPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                SizedBox(
-                                  height: 32,
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ChatPage(
-                                            prestador: prestador,
-                                            servico: s,
+
+                                Row(
+                                  children: [
+                                    // 🔵 BOTÃO ABRIR CHAT
+                                    SizedBox(
+                                      height: 32,
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(
+                                            color: Colors.orange,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                         ),
-                                      );
-                                    },
-                                    child: const Text(
-                                      "Solicitar",
-                                      style: TextStyle(fontSize: 12),
+                                        onPressed: () async {
+                                          final supabase =
+                                              Supabase.instance.client;
+                                          final currentUser =
+                                              supabase.auth.currentUser!;
+
+                                          final prestadorId = prestador["id"]
+                                              .toString();
+
+                                          // 🔎 Verificar se já existe conversa
+                                          final conversaExistente = await supabase
+                                              .from('conversas')
+                                              .select()
+                                              .or(
+                                                'and(usuario1_id.eq.${currentUser.id},usuario2_id.eq.$prestadorId),'
+                                                'and(usuario1_id.eq.$prestadorId,usuario2_id.eq.${currentUser.id})',
+                                              )
+                                              .maybeSingle();
+
+                                          String conversaId;
+
+                                          if (conversaExistente != null) {
+                                            conversaId = conversaExistente["id"]
+                                                .toString();
+                                          } else {
+                                            // 🆕 Criar nova conversa
+                                            final novaConversa = await supabase
+                                                .from('conversas')
+                                                .insert({
+                                                  "usuario1_id": currentUser.id,
+                                                  "usuario2_id": prestadorId,
+                                                })
+                                                .select()
+                                                .single();
+
+                                            conversaId = novaConversa["id"]
+                                                .toString();
+                                          }
+
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ChatPage(
+                                                conversaId: conversaId,
+                                                usuarioDestinoId: prestadorId,
+                                                nomeDestino: prestador["nome"],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text(
+                                          "Abrir Chat",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.orange,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+
+                                    const SizedBox(width: 8),
+
+                                    // 🟠 BOTÃO SOLICITAR
+                                    SizedBox(
+                                      height: 32,
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.orange,
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                        onPressed: () async {
+                                          // <- async adicionado
+                                          final supabase =
+                                              Supabase.instance.client;
+                                          final currentUser =
+                                              supabase.auth.currentUser;
+
+                                          if (currentUser == null) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  "Usuário não logado.",
+                                                ),
+                                              ),
+                                            );
+                                            return;
+                                          }
+
+                                          final contratanteMap = await supabase
+                                              .from('usuarios')
+                                              .select()
+                                              .eq('id', currentUser.id)
+                                              .maybeSingle(); // retorna Map<String, dynamic>?
+
+                                          if (contratanteMap == null) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  "Erro ao obter dados do usuário.",
+                                                ),
+                                              ),
+                                            );
+                                            return;
+                                          }
+
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => CheckoutPage(
+                                                prestador: prestador,
+                                                servico: s,
+                                                contratante: contratanteMap,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text(
+                                          "Solicitar",
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

@@ -1,3 +1,4 @@
+import 'package:contratei/conversas_page.dart';
 import 'package:contratei/meus_servicos_page.dart';
 import 'package:flutter/material.dart';
 import 'main.dart';
@@ -5,6 +6,7 @@ import 'cadastrar_servico_page.dart';
 // importe sua tela financeira
 import 'financeiro_prestador_page.dart';
 import 'ordens_servico_page.dart';
+import 'conversas_page.dart';
 
 class PerfilMenuScreen extends StatelessWidget {
   final Usuario usuario;
@@ -95,18 +97,18 @@ class PerfilMenuScreen extends StatelessWidget {
                 },
               )
             else
-              _botaoQuadrado(
+            /*_botaoQuadrado(
                 icon: Icons.credit_card,
                 titulo: "Pagamentos",
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => FormasPagamentoScreen(usuario: usuario),
+                      builder: (_) => PixScreen(usuario: usuario),
                     ),
                   );
                 },
-              ),
+              ),*/
             if (usuario.tipoUsuario == "Prestador")
               _botaoQuadrado(
                 icon: Icons.calendar_month_outlined,
@@ -134,7 +136,19 @@ class PerfilMenuScreen extends StatelessWidget {
                   );
                 },
               ),
-
+            // ===== CONVERSAS =====
+            _botaoQuadrado(
+              icon: Icons.chat,
+              titulo: "Conversas",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ConversasPage(usuario: usuario),
+                  ),
+                );
+              },
+            ),
             // ===== HISTÓRICO =====
             /*_botaoQuadrado(
               icon: Icons.history,

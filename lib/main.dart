@@ -1,5 +1,6 @@
 import 'package:contratei/cadastrar_servico_page.dart';
 import 'package:contratei/config/api.dart';
+import 'package:contratei/conversas_page.dart';
 import 'package:contratei/prestador_catalogo_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,8 +12,17 @@ import 'prestador_detalhes_page.dart';
 import 'basescreen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'conversas_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://vvcefleuodgjbkkpggni.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2Y2VmbGV1b2RnamJra3BnZ25pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTg5MDgsImV4cCI6MjA4NjM3NDkwOH0.4ppT8CkQfHbH-lSsZ95pVt53MhGxWy7ekjKIAFC_XFE',
+  );
   runApp(const MyApp());
 }
 
@@ -53,7 +63,7 @@ class MyApp extends StatelessWidget {
 
 //=============== MODELO TESTE DE USUARIO
 class Usuario {
-  final int id;
+  final String id;
   String nome;
   String email;
   String cpf;
@@ -75,7 +85,7 @@ class Usuario {
 
   factory Usuario.fromJson(Map<String, dynamic> json) {
     return Usuario(
-      id: int.parse(json["id"].toString()),
+      id: json["id"].toString(),
       nome: json["nome"],
       email: json["email"],
       cpf: json["cpf"],
@@ -157,70 +167,55 @@ class _LoginFormState extends State<LoginForm> {
   List<bool> isSelected = [true, false];
 
   Future<void> login() async {
+    final supabase = Supabase.instance.client;
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
 
-    if (emailController.text.isEmpty || senhaController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Preencha todos os campos")));
-      return;
-    }
-
     try {
-      // Flutter Web
-
-      final response = await http.post(
-        Uri.parse("https://contratei.infinityfreeapp.com/app/login.php"),
-        body: {
-          "email": emailController.text,
-          "senha": senhaController.text,
-          "tipoUsuario": tipoUsuario,
-        },
+      // 🔐 Login real
+      final response = await supabase.auth.signInWithPassword(
+        email: emailController.text.trim(),
+        password: senhaController.text.trim(),
       );
 
-      if (!response.body.trim().startsWith("{")) {
-        debugPrint("Resposta inválida:");
-        debugPrint(response.body);
-        throw Exception("Servidor não retornou JSON");
-      }
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        if (data['success']) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(data['message'])));
+      final user = response.user;
 
-          // dados do usuário
-          var user = data['usuario'];
-          Usuario usuario = Usuario(
-            id: user['id'],
-            nome: user['nome'],
-            email: user['email'],
-            cpf: user['cpf'],
-            telefone: user['telefone'],
-            tipoUsuario: user['tipoUsuario'],
-            ocupacao: user['ocupacao'],
-          );
-
-          // 🔹 Abrir BaseScreen em vez do HomeScreen
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => BaseScreen(usuario: usuario)),
-          );
-        } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(data['message'])));
-        }
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Erro no servidor")));
+      if (user == null) {
+        throw Exception("Usuário não encontrado");
       }
+
+      // 🔎 Buscar perfil na tabela usuarios
+      final perfil = await supabase
+          .from('usuarios')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (perfil == null) {
+        throw Exception("Perfil não encontrado");
+      }
+
+      if (perfil['tipo_usuario'] != tipoUsuario) {
+        throw Exception("Tipo de usuário incorreto");
+      }
+
+      Usuario usuario = Usuario(
+        id: perfil['id'],
+        nome: perfil['nome'],
+        email: user.email ?? "",
+        cpf: perfil['cpf'],
+        telefone: perfil['telefone'],
+        tipoUsuario: perfil['tipo_usuario'],
+        ocupacao: perfil['ocupacao'],
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => BaseScreen(usuario: usuario)),
+      );
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Erro de conexão: $e")));
+      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
     }
   }
 
@@ -316,61 +311,54 @@ class _RegisterFormState extends State<CadastroScreen> {
   }
 
   Future<void> fetchCategorias() async {
-    try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/getCategorias.php");
-      var response = await http.get(url);
+    final supabase = Supabase.instance.client;
 
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        if (data["success"] == true) {
-          setState(() {
-            categorias = List<String>.from(data["categorias"]);
-          });
-        }
-      }
+    try {
+      final response = await supabase.from('categorias').select('nome');
+
+      setState(() {
+        categorias = List<String>.from(response.map((e) => e['nome']));
+      });
     } catch (e) {
       print("Erro ao carregar categorias: $e");
     }
   }
 
   Future<void> cadastrarUsuario() async {
+    final supabase = Supabase.instance.client;
     String tipoUsuario = isSelected[0] ? "Contratante" : "Prestador";
 
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/cadastro.php");
-
-      var response = await http.post(
-        url,
-        body: {
-          "nome": nomeController.text.trim(),
-          "email": emailController.text.trim(),
-          "senha": senhaController.text.trim(),
-          "cpf": cpfController.text.trim(),
-          "telefone": telefoneController.text.trim(),
-          "tipoUsuario": tipoUsuario,
-          "ocupacao": tipoUsuario == "Prestador"
-              ? ocupacaoSelecionada ?? ""
-              : "",
-        },
+      // 1️⃣ Criar usuário no Auth
+      final authResponse = await supabase.auth.signUp(
+        email: emailController.text.trim(),
+        password: senhaController.text.trim(),
       );
-      var data = jsonDecode(response.body);
 
-      if (data["success"]) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("✅ ${data["message"]}")));
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const AuthPage()),
-            (route) => false,
-          );
-        });
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("❌ ${data["message"]}")));
+      final user = authResponse.user;
+
+      if (user == null) {
+        throw Exception("Erro ao criar usuário");
       }
+
+      // 2️⃣ Criar perfil na tabela usuarios
+      await supabase.from('usuarios').insert({
+        "id": user.id,
+        "nome": nomeController.text.trim(),
+        "cpf": cpfController.text.trim(),
+        "telefone": telefoneController.text.trim(),
+        "tipo_usuario": tipoUsuario,
+        "ocupacao": tipoUsuario == "Prestador" ? ocupacaoSelecionada : null,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Usuário cadastrado com sucesso")),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthPage()),
+      );
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -514,20 +502,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> fetchCategorias() async {
-    try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/getCategorias.php");
-      var response = await http.get(url);
+    final supabase = Supabase.instance.client;
 
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        if (data["success"]) {
-          setState(() {
-            allCategorias = List<String>.from(data["categorias"]);
-            filteredCategorias = allCategorias;
-            loading = false;
-          });
-        }
-      }
+    try {
+      final response = await supabase
+          .from('categorias')
+          .select('nome')
+          .order('nome');
+
+      setState(() {
+        allCategorias = List<String>.from(response.map((e) => e['nome']));
+        filteredCategorias = allCategorias;
+        loading = false;
+      });
     } catch (e) {
       print("Erro ao carregar categorias: $e");
     }
@@ -677,6 +664,19 @@ class MeuPerfilScreen extends StatelessWidget {
               decoration: const BoxDecoration(color: Colors.green),
             ),
             ListTile(
+              leading: const Icon(Icons.chat),
+              title: const Text("Conversas"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ConversasPage(usuario: usuario),
+                  ),
+                );
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.person),
               title: const Text("Meus Dados"),
               onTap: () {
@@ -697,7 +697,7 @@ class MeuPerfilScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => FormasPagamentoScreen(usuario: usuario),
+                    builder: (_) => PixScreen(usuario: usuario),
                   ),
                 );
               },
@@ -1037,135 +1037,134 @@ class _MeusDadosScreenState extends State<MeusDadosScreen> {
   }
 }
 
-// ====================== TELA DE FORMAS DE PAGAMENTO ================================
-class FormasPagamentoScreen extends StatefulWidget {
+// ====================== TELA DE CADASTRO DE CHAVE PIX ================================
+class PixScreen extends StatefulWidget {
   final Usuario usuario;
-  const FormasPagamentoScreen({super.key, required this.usuario});
+  const PixScreen({super.key, required this.usuario});
 
   @override
-  State<FormasPagamentoScreen> createState() => _FormasPagamentoScreenState();
+  State<PixScreen> createState() => _PixScreenState();
 }
 
-class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
+class _PixScreenState extends State<PixScreen> {
   final _formKey = GlobalKey<FormState>();
-
-  String tipoCartao = "Crédito";
-  final numeroController = TextEditingController();
-  final nomeController = TextEditingController();
-  final validadeController = TextEditingController();
-  final cvvController = TextEditingController();
-
-  bool isLoading = false;
-  bool isLoadingCartoes = true;
-  List<dynamic> meusCartoes = [];
-
   static const corPrincipal = Color(0xFFFF4E00);
 
-  InputDecoration _decoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: corPrincipal, width: 2),
-      ),
-    );
+  String tipoChave = "CPF";
+  final chaveController = TextEditingController();
+
+  bool isLoading = false;
+  bool carregando = true;
+  List<dynamic> minhasChaves = [];
+
+  @override
+  void initState() {
+    super.initState();
+    carregarChaves();
   }
 
-  // ================= CADASTRAR CARTÃO =================
-  Future<void> cadastrarPagamento() async {
+  // ================= VALIDAÇÃO =================
+  String? validarChave(String? value) {
+    if (value == null || value.isEmpty) {
+      return "Informe a chave Pix";
+    }
+
+    switch (tipoChave) {
+      case "CPF":
+        if (!RegExp(r'^\d{11}$').hasMatch(value)) {
+          return "CPF deve conter 11 números";
+        }
+        break;
+      case "CNPJ":
+        if (!RegExp(r'^\d{14}$').hasMatch(value)) {
+          return "CNPJ deve conter 14 números";
+        }
+        break;
+      case "Telefone":
+        if (!RegExp(r'^\d{11}$').hasMatch(value)) {
+          return "Telefone deve conter 11 números";
+        }
+        break;
+      case "Email":
+        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+          return "Email inválido";
+        }
+        break;
+      case "Aleatória":
+        if (value.length < 32) {
+          return "Chave aleatória inválida";
+        }
+        break;
+    }
+
+    return null;
+  }
+
+  // ================= SALVAR =================
+  Future<void> salvarPix() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/pagamento.php");
-      final response = await http.post(
-        url,
-        body: {
-          "usuario_id": widget.usuario.id,
-          "tipo_cartao": tipoCartao,
-          "numero_cartao": numeroController.text,
-          "nome_cartao": nomeController.text,
-          "validade": validadeController.text,
-          "cvv": cvvController.text,
-        },
-      );
+      final supabase = Supabase.instance.client;
 
-      final data = jsonDecode(response.body);
+      await supabase.from('pix').upsert({
+        "usuario_id": widget.usuario.id,
+        "tipo_chave": tipoChave,
+        "chave": chaveController.text,
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(data["message"] ?? "Erro"),
-          backgroundColor: data["success"] == true ? Colors.green : Colors.red,
-        ),
+        const SnackBar(content: Text("Chave Pix salva com sucesso")),
       );
 
-      if (data["success"] == true) {
-        numeroController.clear();
-        nomeController.clear();
-        validadeController.clear();
-        cvvController.clear();
-        carregarCartoes();
-      }
+      carregarChaves();
+      chaveController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  // ================= LISTAR CARTÕES =================
-  Future<void> carregarCartoes() async {
-    setState(() => isLoadingCartoes = true);
-
+  // ================= LISTAR =================
+  Future<void> carregarChaves() async {
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/listar_pagamentos.php");
-      final response = await http.post(
-        url,
-        body: {"usuario_id": widget.usuario.id},
-      );
+      final supabase = Supabase.instance.client;
 
-      final data = jsonDecode(response.body);
-      meusCartoes = data["success"] == true ? data["cards"] : [];
-    } finally {
-      setState(() => isLoadingCartoes = false);
+      final response = await supabase
+          .from('pix')
+          .select()
+          .eq('usuario_id', widget.usuario.id);
+
+      setState(() {
+        minhasChaves = response;
+        carregando = false;
+      });
+    } catch (e) {
+      print(e);
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    carregarCartoes();
-  }
-
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
       appBar: AppBar(
-        title: const Text("Formas de Pagamento"),
+        title: const Text("Chave Pix"),
         backgroundColor: corPrincipal,
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ================= FORM =================
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1182,82 +1181,38 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      "Cadastrar Cartão",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    DropdownButtonFormField<String>(
+                      value: tipoChave,
+                      decoration: const InputDecoration(
+                        labelText: "Tipo de Chave",
                       ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ChoiceChip(
-                          label: const Text("Crédito"),
-                          selected: tipoCartao == "Crédito",
-                          selectedColor: corPrincipal.withOpacity(0.2),
-                          onSelected: (_) =>
-                              setState(() => tipoCartao = "Crédito"),
+                      items: const [
+                        DropdownMenuItem(value: "CPF", child: Text("CPF")),
+                        DropdownMenuItem(value: "CNPJ", child: Text("CNPJ")),
+                        DropdownMenuItem(value: "Email", child: Text("Email")),
+                        DropdownMenuItem(
+                          value: "Telefone",
+                          child: Text("Telefone"),
                         ),
-                        const SizedBox(width: 12),
-                        ChoiceChip(
-                          label: const Text("Débito"),
-                          selected: tipoCartao == "Débito",
-                          selectedColor: corPrincipal.withOpacity(0.2),
-                          onSelected: (_) =>
-                              setState(() => tipoCartao = "Débito"),
+                        DropdownMenuItem(
+                          value: "Aleatória",
+                          child: Text("Aleatória"),
                         ),
                       ],
+                      onChanged: (v) => setState(() => tipoChave = v!),
                     ),
                     const SizedBox(height: 16),
-
                     TextFormField(
-                      controller: numeroController,
-                      decoration: _decoration("Número do cartão"),
-                      keyboardType: TextInputType.number,
-                      validator: (v) => v!.isEmpty ? "Informe o número" : null,
-                    ),
-                    const SizedBox(height: 12),
-
-                    TextFormField(
-                      controller: nomeController,
-                      decoration: _decoration("Nome no cartão"),
-                      validator: (v) => v!.isEmpty ? "Informe o nome" : null,
-                    ),
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: validadeController,
-                            decoration: _decoration("Validade"),
-                            validator: (v) =>
-                                v!.isEmpty ? "Informe a validade" : null,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: cvvController,
-                            decoration: _decoration("CVV"),
-                            keyboardType: TextInputType.number,
-                            validator: (v) =>
-                                v!.isEmpty ? "Informe o CVV" : null,
-                          ),
-                        ),
-                      ],
+                      controller: chaveController,
+                      decoration: const InputDecoration(labelText: "Chave Pix"),
+                      validator: validarChave,
                     ),
                     const SizedBox(height: 20),
-
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: isLoading ? null : cadastrarPagamento,
+                        onPressed: isLoading ? null : salvarPix,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: corPrincipal,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1270,11 +1225,8 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
                                 color: Colors.white,
                               )
                             : const Text(
-                                "Salvar Cartão",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                ),
+                                "Salvar Chave Pix",
+                                style: TextStyle(color: Colors.white),
                               ),
                       ),
                     ),
@@ -1283,30 +1235,18 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
               ),
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
 
-            // ================= LISTA =================
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                "Meus Cartões",
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            isLoadingCartoes
+            carregando
                 ? const CircularProgressIndicator()
-                : meusCartoes.isEmpty
-                ? const Text("Nenhum cartão cadastrado")
+                : minhasChaves.isEmpty
+                ? const Text("Nenhuma chave cadastrada")
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: meusCartoes.length,
+                    itemCount: minhasChaves.length,
                     itemBuilder: (_, i) {
-                      final card = meusCartoes[i];
-                      final numero = card["numero_cartao"].toString();
-                      final ultimos = numero.substring(numero.length - 4);
+                      final pix = minhasChaves[i];
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -1322,275 +1262,14 @@ class _FormasPagamentoScreenState extends State<FormasPagamentoScreen> {
                           ],
                         ),
                         child: ListTile(
-                          leading: const Icon(
-                            Icons.credit_card,
-                            color: corPrincipal,
-                          ),
-                          title: Text("**** **** **** $ultimos"),
-                          subtitle: Text(
-                            "${card["nome_cartao"]} • ${card["validade"]}",
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => EditarCartaoScreen(
-                                  card: card,
-                                  onAtualizar: carregarCartoes,
-                                ),
-                              ),
-                            );
-                          },
+                          leading: const Icon(Icons.pix, color: corPrincipal),
+                          title: Text(pix["chave"]),
+                          subtitle: Text(pix["tipo_chave"]),
                         ),
                       );
                     },
                   ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class EditarCartaoScreen extends StatefulWidget {
-  final Map<String, dynamic> card;
-  final VoidCallback onAtualizar;
-
-  const EditarCartaoScreen({
-    super.key,
-    required this.card,
-    required this.onAtualizar,
-  });
-
-  @override
-  State<EditarCartaoScreen> createState() => _EditarCartaoScreenState();
-}
-
-class _EditarCartaoScreenState extends State<EditarCartaoScreen> {
-  static const corPrincipal = Color(0xFFFF4E00);
-
-  late TextEditingController tipoController;
-  late TextEditingController numeroController;
-  late TextEditingController nomeController;
-  late TextEditingController validadeController;
-  late TextEditingController cvvController;
-
-  bool isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    tipoController = TextEditingController(text: widget.card["tipo_cartao"]);
-    numeroController = TextEditingController(
-      text: widget.card["numero_cartao"],
-    );
-    nomeController = TextEditingController(text: widget.card["nome_cartao"]);
-    validadeController = TextEditingController(text: widget.card["validade"]);
-    cvvController = TextEditingController(text: widget.card["cvv"]);
-  }
-
-  InputDecoration _decoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: corPrincipal, width: 2),
-      ),
-    );
-  }
-
-  // ================= ATUALIZAR CARTÃO =================
-  Future<void> atualizarCartao() async {
-    setState(() => isLoading = true);
-
-    try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/editar_cartao.php");
-      final response = await http.post(
-        url,
-        body: {
-          "id": widget.card["id"],
-          "tipo_cartao": tipoController.text,
-          "numero_cartao": numeroController.text,
-          "nome_cartao": nomeController.text,
-          "validade": validadeController.text,
-          "cvv": cvvController.text,
-        },
-      );
-
-      final data = jsonDecode(response.body);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(data["message"] ?? "Erro"),
-          backgroundColor: data["success"] == true ? Colors.green : Colors.red,
-        ),
-      );
-
-      if (data["success"] == true) {
-        widget.onAtualizar();
-        Navigator.pop(context);
-      }
-    } finally {
-      setState(() => isLoading = false);
-    }
-  }
-
-  // ================= DELETAR CARTÃO =================
-  Future<void> deletarCartao() async {
-    setState(() => isLoading = true);
-
-    try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/deletar_cartao.php");
-      final response = await http.post(url, body: {"id": widget.card["id"]});
-
-      final data = jsonDecode(response.body);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(data["message"] ?? "Erro"),
-          backgroundColor: data["success"] == true ? Colors.green : Colors.red,
-        ),
-      );
-
-      if (data["success"] == true) {
-        widget.onAtualizar();
-        Navigator.pop(context);
-      }
-    } finally {
-      setState(() => isLoading = false);
-    }
-  }
-
-  // ================= UI =================
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F6),
-      appBar: AppBar(
-        title: const Text("Editar Cartão"),
-        backgroundColor: corPrincipal,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 8,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Dados do Cartão",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              TextField(
-                controller: tipoController,
-                decoration: _decoration("Tipo do Cartão"),
-                readOnly: true,
-              ),
-              const SizedBox(height: 12),
-
-              TextField(
-                controller: numeroController,
-                decoration: _decoration("Número do Cartão"),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-
-              TextField(
-                controller: nomeController,
-                decoration: _decoration("Nome no Cartão"),
-              ),
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: validadeController,
-                      decoration: _decoration("Validade"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: cvvController,
-                      decoration: _decoration("CVV"),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // BOTÕES
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : atualizarCartao,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: corPrincipal,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          "Salvar Alterações",
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: isLoading ? null : deletarCartao,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text("Excluir Cartão"),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

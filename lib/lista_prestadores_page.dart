@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'prestador_detalhes_page.dart';
-import 'config/api.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ListaPrestadoresPage extends StatefulWidget {
   final String ocupacao;
@@ -24,27 +22,20 @@ class _ListaPrestadoresPageState extends State<ListaPrestadoresPage> {
 
   Future<void> fetchPrestadores() async {
     try {
-      final url = Uri.parse(
-        "${ApiConfig.baseUrl}/getPrestadores.php=${Uri.encodeComponent(widget.ocupacao)}",
-      );
+      final supabase = Supabase.instance.client;
 
-      final response = await http.get(url);
+      final response = await supabase
+          .from('usuarios')
+          .select()
+          .eq('tipo_usuario', 'Prestador')
+          .eq('ocupacao', widget.ocupacao);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        if (data["success"]) {
-          setState(() {
-            prestadores = List<Map<String, dynamic>>.from(data["prestadores"]);
-          });
-        } else {
-          _showMsg(data["message"] ?? "Erro ao carregar prestadores");
-        }
-      } else {
-        _showMsg("Erro HTTP: ${response.statusCode}");
-      }
+      setState(() {
+        prestadores = List<Map<String, dynamic>>.from(response);
+      });
     } catch (e) {
-      _showMsg("Erro: $e");
+      _showMsg("Erro ao carregar prestadores");
+      debugPrint("Erro detalhado: $e");
     } finally {
       setState(() => carregando = false);
     }

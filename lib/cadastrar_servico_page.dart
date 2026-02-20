@@ -1,8 +1,6 @@
 import 'package:contratei/main.dart';
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'config/api.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CadastrarServicoPage extends StatefulWidget {
   final Usuario usuario;
@@ -22,28 +20,27 @@ class _CadastrarServicoPageState extends State<CadastrarServicoPage> {
   Future<void> cadastrarServico() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final url = Uri.parse("${ApiConfig.baseUrl}/cadastrar_servico.php");
+    try {
+      final supabase = Supabase.instance.client;
 
-    final response = await http.post(
-      url,
-      body: {
+      await supabase.from('servicos').insert({
         "prestador_id": widget.usuario.id,
         "nome_servico": nomeController.text,
         "descricao": descricaoController.text,
-        "preco": double.parse(precoController.text),
-      },
-    );
+        "preco": double.parse(precoController.text.replaceAll(",", ".")),
+      });
 
-    final data = jsonDecode(response.body);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Serviço cadastrado com sucesso")),
+      );
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(data["message"])));
-
-    if (data["success"]) {
       nomeController.clear();
       descricaoController.clear();
       precoController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro ao cadastrar: $e")));
     }
   }
 

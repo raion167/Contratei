@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'main.dart';
 import 'cadastrar_servico_page.dart';
-import 'config/api.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MeusServicosPage extends StatefulWidget {
   final Usuario usuario;
@@ -25,20 +23,17 @@ class _MeusServicosPageState extends State<MeusServicosPage> {
 
   Future<void> buscarServicos() async {
     try {
-      final url = Uri.parse(
-        "${ApiConfig.baseUrl}/getPrestadores.php?prestador_id=${widget.usuario.id}",
-      );
+      final supabase = Supabase.instance.client;
 
-      final response = await http.get(url);
+      final response = await supabase
+          .from('servicos')
+          .select()
+          .eq('prestador_id', widget.usuario.id)
+          .order('created_at', ascending: false);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data["success"]) {
-          setState(() {
-            servicos = data["servicos"];
-          });
-        }
-      }
+      setState(() {
+        servicos = response;
+      });
     } catch (e) {
       debugPrint("Erro ao buscar serviços: $e");
     } finally {
@@ -49,7 +44,7 @@ class _MeusServicosPageState extends State<MeusServicosPage> {
   }
 
   // ================= EXCLUIR SERVIÇO =================
-  Future<void> excluirServico(int idServico) async {
+  Future<void> excluirServico(String idServico) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -72,9 +67,9 @@ class _MeusServicosPageState extends State<MeusServicosPage> {
     if (confirm != true) return;
 
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/excluir_servico.php");
+      final supabase = Supabase.instance.client;
 
-      await http.post(url, body: {"id": idServico});
+      await supabase.from('servicos').delete().eq('id', idServico);
 
       buscarServicos();
     } catch (e) {
@@ -191,7 +186,7 @@ class _MeusServicosPageState extends State<MeusServicosPage> {
                               icon: const Icon(Icons.delete),
                               color: Colors.red,
                               onPressed: () =>
-                                  excluirServico(int.parse(s["id"].toString())),
+                                  excluirServico(s["id"].toString()),
                             ),
                           ],
                         ),
